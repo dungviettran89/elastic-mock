@@ -148,6 +148,119 @@ export class Store {
       _id: docId,
       _version: 1,
       result: isUpdate ? 'updated' : 'created',
+      _shards: { total: 1, successful: 1, failed: 0 },
+      _seq_no: 0,
+      _primary_term: 1,
+    };
+  }
+
+  mget(body: any) {
+    const docs = body.docs || [];
+    const results = docs.map((doc: any) => {
+      const index = this.getIndex(doc._index);
+      if (index) {
+        const source = index.documents.get(doc._id);
+        if (source) {
+          return {
+            _index: doc._index,
+            _id: doc._id,
+            _version: 1,
+            _seq_no: 0,
+            _primary_term: 1,
+            found: true,
+            _source: source,
+          };
+        }
+      }
+      return {
+        _index: doc._index,
+        _id: doc._id,
+        found: false,
+      };
+    });
+    return { docs: results };
+  }
+
+  msearch(body: any[]) {
+    const responses: any[] = [];
+    // body is an array of [header, query, header, query, ...]
+    for (let i = 0; i < body.length; i += 2) {
+      const header = body[i];
+      const query = body[i + 1];
+      const indexName = header.index;
+
+      try {
+        const result = this.search(indexName, query);
+        responses.push(result);
+      } catch (error: any) {
+        responses.push({
+          error: {
+            root_cause: [{ type: 'search_phase_execution_exception', reason: error.message }],
+            type: 'search_phase_execution_exception',
+            reason: error.message,
+          },
+          status: 400,
+        });
+      }
+    }
+    return { responses };
+  }
+
+  updateByQuery(indexName: string, body: any) {
+    const index = this.getIndex(indexName);
+    if (!index) {
+      throw new Error(`Index [${indexName}] not found`);
+    }
+
+    const count = index.documents.size;
+    return {
+      took: 1,
+      timed_out: false,
+      total: count,
+      updated: count,
+      deleted: 0,
+      batches: 1,
+      version_conflicts: 0,
+      noops: 0,
+      retries: { bulk: 0, search: 0 },
+      throttled_millis: 0,
+      requests_per_second: -1.0,
+      throttled_until_millis: 0,
+      failures: [],
+    };
+  }
+
+  deleteByQuery(indexName: string, body: any) {
+    const index = this.getIndex(indexName);
+    if (!index) {
+      throw new Error(`Index [${indexName}] not found`);
+    }
+
+    const count = index.documents.size;
+    // Clear the index
+    index.documents.clear();
+    index.searchIndex = new (Document as any)({
+      document: {
+        id: 'id',
+        index: this.extractIndexedFields(index.mappings),
+        store: false,
+      },
+      tokenize: 'forward',
+    });
+
+    return {
+      took: 1,
+      timed_out: false,
+      total: count,
+      deleted: count,
+      batches: 1,
+      version_conflicts: 0,
+      noops: 0,
+      retries: { bulk: 0, search: 0 },
+      throttled_millis: 0,
+      requests_per_second: -1.0,
+      throttled_until_millis: 0,
+      failures: [],
     };
   }
 

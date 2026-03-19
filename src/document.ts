@@ -95,6 +95,66 @@ export function createDocumentRouter() {
     res.status(200).end();
   });
 
+  // GET Document Source
+  router.get('/:index/_source/:id', (req, res) => {
+    const { index, id } = req.params;
+    logger.info(`Documents: GET source request for [${id}] in [${index}]`);
+    const result = globalStore.getDocument(index, id);
+    if (!result || !result.found) {
+      return res.status(404).end();
+    }
+    res.json(result._source);
+  });
+
+  // Multi Get API
+  const handleMget = (req: any, res: any) => {
+    logger.info(`Documents: mget request`);
+    const result = globalStore.mget(req.body);
+    res.json(result);
+  };
+  router.post('/_mget', handleMget);
+  router.get('/_mget', handleMget);
+  router.post('/:index/_mget', handleMget);
+  router.get('/:index/_mget', handleMget);
+
+  // Multi Search API
+  const handleMsearch = (req: any, res: any) => {
+    logger.info(`Documents: msearch request`);
+    let body = req.body;
+    if (typeof body === 'string') {
+      const lines = body.trim().split('\n');
+      body = lines.map((l) => JSON.parse(l));
+    }
+    const result = globalStore.msearch(body);
+    res.json(result);
+  };
+  router.post('/_msearch', handleMsearch);
+  router.get('/_msearch', handleMsearch);
+  router.post('/:index/_msearch', handleMsearch);
+  router.get('/:index/_msearch', handleMsearch);
+
+  // Update By Query
+  router.post('/_update_by_query', (req, res) => {
+    const result = globalStore.updateByQuery('_all', req.body);
+    res.json(result);
+  });
+  router.post('/:index/_update_by_query', (req, res) => {
+    const { index } = req.params;
+    const result = globalStore.updateByQuery(index, req.body);
+    res.json(result);
+  });
+
+  // Delete By Query
+  router.post('/_delete_by_query', (req, res) => {
+    const result = globalStore.deleteByQuery('_all', req.body);
+    res.json(result);
+  });
+  router.post('/:index/_delete_by_query', (req, res) => {
+    const { index } = req.params;
+    const result = globalStore.deleteByQuery(index, req.body);
+    res.json(result);
+  });
+
   // Update Document
   router.post('/:index/_update/:id', (req, res) => {
     const { index, id } = req.params;
