@@ -28,7 +28,7 @@ export function createClusterRouter() {
     const { metric } = req.params;
 
     const state: any = {
-      cluster_name: 'elastic-mock',
+      cluster_name: 'elasticsearch',
       cluster_uuid: 'z1234567890',
     };
 

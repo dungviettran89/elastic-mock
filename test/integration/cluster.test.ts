@@ -28,7 +28,7 @@ describe('Cluster Integration Tests', () => {
 
   it('1.1 Cluster Health should return green status', async () => {
     const health = await client.cluster.health();
-    expect(health.cluster_name).toBe('elastic-mock');
+    expect(health.cluster_name).toBe('elasticsearch');
     expect(health.status).toBe('green');
   });
 
@@ -38,7 +38,7 @@ describe('Cluster Integration Tests', () => {
     });
 
     // In @elastic/elasticsearch 8.x, state returns a body with cluster_name, metadata, etc.
-    expect(state.cluster_name).toBe('elastic-mock');
+    expect(state.cluster_name).toBe('elasticsearch');
     expect(state.metadata).toBeDefined();
     expect(state.metadata?.indices).toEqual({});
   });

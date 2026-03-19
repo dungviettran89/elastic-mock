@@ -244,7 +244,7 @@ export class Store {
     const count = index.documents.size;
     // We'll simulate deleting only 1 document if many exist
     const deletedCount = count > 0 ? 1 : 0;
-    
+
     if (deletedCount > 0) {
       // Actually delete the first document found just to be somewhat real
       const firstId = index.documents.keys().next().value;
@@ -590,7 +590,17 @@ export class Store {
   private extractIndexedFields(mappings: any): string[] {
     if (!mappings?.properties || Object.keys(mappings.properties).length === 0) {
       // Default common fields for dynamic indexing
-      return ['name', 'title', 'content', 'description', 'message', 'author', 'foo', 'bar', 'service'];
+      return [
+        'name',
+        'title',
+        'content',
+        'description',
+        'message',
+        'author',
+        'foo',
+        'bar',
+        'service',
+      ];
     }
     return Object.entries(mappings.properties)
       .filter(([_, value]: [string, any]) => value.type === 'text' || value.type === 'keyword')

@@ -1,9 +1,11 @@
 import express from 'express';
 import { createClusterRouter } from './cluster.js';
-import { createIndicesRouter } from './indices.js';
-import { createDocumentRouter } from './document.js';
+import { createIndicesRouter } from './routes/indices/index.js';
+import { createDocumentRouter } from './routes/document/index.js';
 import { createSearchRouter } from './search.js';
-import { createCatRouter } from './cat.js';
+import { createCatRouter } from './routes/cat/index.js';
+import { createNodesRouter, createTasksRouter } from './nodes.js';
+import { createMiscRouter } from './routes/misc.js';
 import { logger } from './logger.js';
 
 export function createServer() {
@@ -14,11 +16,14 @@ export function createServer() {
     const start = Date.now();
     res.on('finish', () => {
       const duration = Date.now() - start;
-      logger.info(`${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`, {
-        ip: req.ip,
-        userAgent: req.get('user-agent'),
-        contentType: req.get('content-type'),
-      });
+      logger.info(
+        `${req.method} ${req.originalUrl} (path: ${req.path}) ${res.statusCode} ${duration}ms`,
+        {
+          ip: req.ip,
+          userAgent: req.get('user-agent'),
+          contentType: req.get('content-type'),
+        },
+      );
     });
     next();
   });
@@ -62,8 +67,14 @@ export function createServer() {
     });
   });
 
-  // Order matters: more specific routes first if there is overlap,
-  // but here they are mostly prefix-based.
+  // Order matters: more specific routes first if there is overlap
+
+  // Nodes and Tasks Routers
+  app.use('/_nodes', createNodesRouter());
+  app.use('/_tasks', createTasksRouter());
+
+  // Misc Mocks (Watcher, Scripts, SQL, etc.)
+  app.use('/', createMiscRouter());
 
   // Cluster APIs
   app.use('/_cluster', createClusterRouter());
@@ -79,66 +90,6 @@ export function createServer() {
 
   // Indices APIs (at root level like /products)
   app.use('/', createIndicesRouter());
-
-  // Cluster/Misc Mocks
-  app.get('/_nodes', (req, res) => {
-    res.json({
-      _nodes: { total: 1, successful: 1, failed: 0 },
-      cluster_name: 'elasticsearch',
-      nodes: {
-        'mock-node-id': {
-          name: 'elastic-mock',
-          roles: ['master', 'data', 'ingest'],
-          version: '8.10.0',
-        },
-      },
-    });
-  });
-
-  app.get(['/_tasks', '/_tasks/:id'], (req, res) => {
-    res.json({ nodes: {} });
-  });
-
-  app.get('/_xpack', (req, res) => {
-    res.json({
-      build: { hash: 'unknown', date: 'unknown' },
-      features: {
-        aggregate_metric: { available: true, enabled: true },
-        analytics: { available: true, enabled: true },
-        ccr: { available: true, enabled: true },
-        data_streams: { available: true, enabled: true },
-        ilm: { available: true, enabled: true },
-        ml: { available: true, enabled: true },
-        monitoring: { available: true, enabled: true },
-        rollup: { available: true, enabled: true },
-        security: { available: true, enabled: true },
-        sql: { available: true, enabled: true },
-        transform: { available: true, enabled: true },
-        watcher: { available: true, enabled: true },
-      },
-      tagline: 'You know, for X',
-    });
-  });
-
-  app.get('/_license', (req, res) => {
-    res.json({
-      license: {
-        status: 'active',
-        uid: 'mock-license-id',
-        type: 'trial',
-        issue_date_in_millis: Date.now(),
-        expiry_date_in_millis: Date.now() + 1000 * 60 * 60 * 24 * 30,
-      },
-    });
-  });
-
-  app.put('/_ingest/pipeline/:id', (req, res) => {
-    res.json({ acknowledged: true });
-  });
-
-  app.get('/_ingest/pipeline/:id?', (req, res) => {
-    res.json({});
-  });
 
   return app;
 }

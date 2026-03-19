@@ -112,10 +112,10 @@ async function runStep(step: any) {
 function getValueByPath(obj: any, path: string): any {
   if (!obj) return undefined;
   if (path === '$body' || path === '') return obj.body || obj;
-  
+
   // Try exact path at root first
   if (obj[path] !== undefined) return obj[path];
-  
+
   const data = obj.body || obj;
   // Try exact path in body
   if (data && data[path] !== undefined) return data[path];
@@ -139,12 +139,14 @@ function getValueByPath(obj: any, path: string): any {
 
 function assertMatch(actual: any, expected: any, path: string = '') {
   expected = replaceVariables(expected);
-  
+
   if (typeof expected === 'string' && expected.startsWith('/') && expected.endsWith('/')) {
     const regexStr = expected.substring(1, expected.length - 1);
     const regex = new RegExp(regexStr);
     if (!regex.test(String(actual))) {
-      throw new Error(`Assertion failed at [${path}]: expected to match [${expected}], got [${actual}]`);
+      throw new Error(
+        `Assertion failed at [${path}]: expected to match [${expected}], got [${actual}]`,
+      );
     }
     return;
   }
@@ -230,7 +232,7 @@ async function runFile(filePath: string) {
           console.log('   📦 Response:', JSON.stringify(lastResponse, null, 2).substring(0, 1000));
         } else if (step.set) {
           for (let [key, path] of Object.entries(step.set)) {
-            // In YAML, it might be: set: { _id: id } 
+            // In YAML, it might be: set: { _id: id }
             // where _id is the field in response, and id is the variable name
             // BUT wait, standard is set: { varName: path.in.body }
             // Let's check both
@@ -263,17 +265,22 @@ async function runFile(filePath: string) {
           const key = Object.keys(step.lt)[0];
           const val = getValueByPath(lastResponse, key);
           const expected = replaceVariables(step.lt[key]);
-          if (!(val < expected)) throw new Error(`Expected [${key}] to be < [${expected}], got [${val}]`);
+          if (!(val < expected))
+            throw new Error(`Expected [${key}] to be < [${expected}], got [${val}]`);
         } else if (step.gt) {
           const key = Object.keys(step.gt)[0];
           const val = getValueByPath(lastResponse, key);
           const expected = replaceVariables(step.gt[key]);
-          if (!(val > expected)) throw new Error(`Expected [${key}] to be > [${expected}], got [${val}]`);
+          if (!(val > expected))
+            throw new Error(`Expected [${key}] to be > [${expected}], got [${val}]`);
         } else if (step.length) {
           const key = Object.keys(step.length)[0];
           const val = getValueByPath(lastResponse, key);
           const expected = step.length[key];
-          if (val?.length !== expected) throw new Error(`Expected length of [${key}] to be [${expected}], got [${val?.length}]`);
+          if (val?.length !== expected)
+            throw new Error(
+              `Expected length of [${key}] to be [${expected}], got [${val?.length}]`,
+            );
         }
       }
       console.log(`   ✅ Passed`);

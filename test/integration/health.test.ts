@@ -35,7 +35,7 @@ describe('Elasticsearch Mock Health API', () => {
 
   it('should return cluster health for GET /_cluster/health', async () => {
     const health = await client.cluster.health();
-    expect(health.cluster_name).toBe('elastic-mock');
+    expect(health.cluster_name).toBe('elasticsearch');
     expect(health.status).toBe('green');
   });
 });
