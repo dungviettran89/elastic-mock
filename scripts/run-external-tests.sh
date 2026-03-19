@@ -10,15 +10,14 @@ else
   echo "External tests already exist, skipping clone."
 fi
 
-# 2. Start server in background
-echo "Starting elastic-mock server..."
-npm run dev -- serve --port 19200 > server.log 2>&1 &
-SERVER_PID=$!
+# 2. Start server
+echo "Starting elastic-mock server via PM2..."
+npm run service:start
 
 # Function to cleanup server on exit
 cleanup() {
-  echo "Stopping server (PID: $SERVER_PID)..."
-  kill $SERVER_PID || true
+  echo "Stopping elastic-mock server..."
+  npm run service:stop || true
 }
 trap cleanup EXIT
 

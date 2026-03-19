@@ -76,3 +76,18 @@ searchRouter.post(['/_search/scroll', '/_search/scroll/:scroll_id'], (req, res) 
 searchRouter.delete(['/_search/scroll', '/_search/scroll/:scroll_id'], (req, res) => {
   res.json({ succeeded: true, num_freed: 1 });
 });
+
+// Multi Search Template API
+searchRouter.post(['/_msearch/template', '/:index/_msearch/template'], (req, res) => {
+  res.json({
+    responses: [],
+  });
+});
+
+// Rank Eval API
+searchRouter.post(['/_rank_eval', '/:index/_rank_eval'], (req, res) => {
+  res.json({
+    metric_score: 1.0,
+    details: {},
+  });
+});

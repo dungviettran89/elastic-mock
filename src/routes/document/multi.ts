@@ -31,3 +31,24 @@ multiRouter.post('/_msearch', handleMsearch);
 multiRouter.get('/_msearch', handleMsearch);
 multiRouter.post('/:index/_msearch', handleMsearch);
 multiRouter.get('/:index/_msearch', handleMsearch);
+
+// Multi Term Vectors
+multiRouter.post(['/_mtermvectors', '/:index/_mtermvectors'], (req, res) => {
+  res.json({
+    docs: [
+      {
+        term_vectors: {
+          text: {
+            terms: {
+              brown: {
+                term_freq: 2,
+              },
+            },
+          },
+        },
+      },
+    ],
+  });
+});
+
+export const multiRouterExport = multiRouter;

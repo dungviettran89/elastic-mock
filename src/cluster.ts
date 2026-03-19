@@ -63,5 +63,40 @@ export function createClusterRouter() {
     });
   });
 
+  router.post('/allocation/explain', (req, res) => {
+    res.json({
+      index: 'mock',
+      shard: 0,
+      primary: true,
+      current_state: 'started',
+      current_node: { id: 'mock-node', name: 'mock-node' }
+    });
+  });
+
+  router.get('/pending_tasks', (req, res) => {
+    res.json({ tasks: [] });
+  });
+
+  router.post('/reroute', (req, res) => {
+    res.json({ acknowledged: true });
+  });
+
+  router.get('/stats', (req, res) => {
+    res.json({
+      _nodes: { total: 1, successful: 1, failed: 0 },
+      cluster_name: 'elasticsearch',
+      cluster_uuid: 'z1234567890',
+      status: 'green'
+    });
+  });
+
+  router.post('/voting_config_exclusions', (req, res) => {
+    res.json({ acknowledged: true });
+  });
+
+  router.delete('/voting_config_exclusions', (req, res) => {
+    res.json({ acknowledged: true });
+  });
+
   return router;
 }

@@ -69,9 +69,8 @@ export function createServer() {
 
   // Order matters: more specific routes first if there is overlap
 
-  // Nodes and Tasks Routers
-  app.use('/_nodes', createNodesRouter());
-  app.use('/_tasks', createTasksRouter());
+  // CAT APIs
+  app.use('/_cat', createCatRouter());
 
   // Misc Mocks (Watcher, Scripts, SQL, etc.)
   app.use('/', createMiscRouter());
@@ -79,14 +78,20 @@ export function createServer() {
   // Cluster APIs
   app.use('/_cluster', createClusterRouter());
 
-  // CAT APIs
-  app.use('/_cat', createCatRouter());
 
-  // Document APIs (includes /_bulk)
-  app.use('/', createDocumentRouter());
+  // Shortcuts for common root-level APIs
+  app.get('/_health', (req, res) => res.redirect('/_cluster/health'));
+  app.get('/health', (req, res) => res.redirect('/_cluster/health'));
+
+  // Nodes and Tasks Routers
+  app.use('/_nodes', createNodesRouter());
+  app.use('/_tasks', createTasksRouter());
 
   // Search APIs (Global /_search and /:index/_search)
   app.use('/', createSearchRouter());
+
+  // Document APIs (includes /_bulk)
+  app.use('/', createDocumentRouter());
 
   // Indices APIs (at root level like /products)
   app.use('/', createIndicesRouter());

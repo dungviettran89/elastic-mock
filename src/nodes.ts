@@ -125,10 +125,5 @@ export function createTasksRouter() {
     res.json({ nodes: [] });
   });
 
-  router.all('*', (req, res) => {
-    console.log(`   ⚠️ TasksRouter missed: ${req.method} ${req.originalUrl} (path: ${req.path})`);
-    res.status(404).json({ error: 'not found in tasks router' });
-  });
-
   return router;
 }
