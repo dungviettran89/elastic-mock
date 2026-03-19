@@ -73,6 +73,28 @@ export function createDocumentRouter() {
     res.json(result);
   });
 
+  // HEAD Document
+  router.head('/:index/_doc/:id', (req, res) => {
+    const { index, id } = req.params;
+    logger.info(`Documents: HEAD request for [${id}] in [${index}]`);
+    const result = globalStore.getDocument(index, id);
+    if (!result || !result.found) {
+      return res.status(404).end();
+    }
+    res.status(200).end();
+  });
+
+  // HEAD Document Source
+  router.head('/:index/_source/:id', (req, res) => {
+    const { index, id } = req.params;
+    logger.info(`Documents: HEAD source request for [${id}] in [${index}]`);
+    const result = globalStore.getDocument(index, id);
+    if (!result || !result.found) {
+      return res.status(404).end();
+    }
+    res.status(200).end();
+  });
+
   // Update Document
   router.post('/:index/_update/:id', (req, res) => {
     const { index, id } = req.params;

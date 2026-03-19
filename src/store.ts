@@ -56,9 +56,10 @@ export class Store {
   }
 
   indexDocument(indexName: string, id: string | undefined, body: any) {
-    const index = this.getIndex(indexName);
+    let index = this.getIndex(indexName);
     if (!index) {
-      throw new Error(`Index [${indexName}] not found`);
+      this.createIndex(indexName, {});
+      index = this.getIndex(indexName)!;
     }
 
     const docId = id || this.generateId();
@@ -87,12 +88,13 @@ export class Store {
     if (!index) return null;
 
     const doc = index.documents.get(id);
-    if (!doc)
+    if (!doc) {
       return {
         _index: indexName,
         _id: id,
         found: false,
       };
+    }
 
     return {
       _index: indexName,

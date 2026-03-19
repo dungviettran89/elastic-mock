@@ -145,6 +145,10 @@ vite.config.ts.timestamp-*
 *.ipr
 
 
-#  AI
+# AI
 *.local.json
 *.local.md
+
+# External Tests
+external-tests/
+server.log

@@ -6,12 +6,17 @@
   "type": "module",
   "scripts": {
     "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
+    "dev": "tsx src/index.ts serve --port 19200",
     "build": "tsc",
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "vitest run test/integration"
+    "test:integration": "vitest run test/integration",
+    "test:external": "./scripts/run-external-tests.sh",
+    "service:start": "npm run build && pm2 delete elastic-mock || true && pm2 start dist/index.js --name elastic-mock -- serve --port 19200",
+    "service:stop": "pm2 stop elastic-mock || true",
+    "service:log": "pm2 logs",
+    "service:status": "pm2 status"
   },
   "keywords": [
     "elasticsearch",
@@ -40,9 +45,13 @@
   "devDependencies": {
     "@elastic/elasticsearch": "^8.13.1",
     "@types/express": "^4.17.21",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.12.7",
     "@types/supertest": "^7.2.0",
     "@types/winston": "^2.4.4",
+    "glob": "^13.0.6",
+    "js-yaml": "^4.1.1",
+    "pm2": "^6.0.14",
     "prettier": "^3.8.1",
     "supertest": "^7.2.2",
     "tsx": "^4.7.2",
