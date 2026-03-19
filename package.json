@@ -15,7 +15,7 @@
     "test:external": "./scripts/run-external-tests.sh",
     "service:start": "npm run build && pm2 delete elastic-mock || true && pm2 start dist/index.js --name elastic-mock -- serve --port 19200",
     "service:stop": "pm2 stop elastic-mock || true",
-    "service:log": "pm2 logs",
+    "service:log": "timeout 2s pm2 logs --lines 100 --no-daemon",
     "service:status": "pm2 status"
   },
   "keywords": [

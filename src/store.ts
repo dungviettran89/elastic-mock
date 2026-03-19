@@ -5,6 +5,7 @@ export interface IndexState {
   name: string;
   settings: any;
   mappings: any;
+  aliases: Set<string>;
   documents: Map<string, any>;
   searchIndex: any; // FlexSearch Document instance
 }
@@ -19,6 +20,11 @@ export class Store {
 
     const mappings = body.mappings || { properties: {} };
     const settings = body.settings || { number_of_shards: 1, number_of_replicas: 0 };
+    const aliases = new Set<string>();
+
+    if (body.aliases) {
+      Object.keys(body.aliases).forEach((alias) => aliases.add(alias));
+    }
 
     // Initialize FlexSearch based on mappings
     const searchIndex = new (Document as any)({
@@ -34,21 +40,83 @@ export class Store {
       name,
       settings,
       mappings,
+      aliases,
       documents: new Map(),
       searchIndex,
     });
   }
 
   getIndex(name: string): IndexState | undefined {
-    return this.indices.get(name);
+    // 1. Direct match
+    if (this.indices.has(name)) {
+      return this.indices.get(name);
+    }
+
+    // 2. Alias match
+    for (const index of this.indices.values()) {
+      if (index.aliases.has(name)) {
+        return index;
+      }
+    }
+
+    return undefined;
   }
 
   hasIndex(name: string): boolean {
-    return this.indices.has(name);
+    return !!this.getIndex(name);
+  }
+
+  addAlias(indexName: string, aliasName: string) {
+    const index = this.indices.get(indexName);
+    if (!index) {
+      throw new Error(`Index [${indexName}] not found`);
+    }
+    index.aliases.add(aliasName);
+  }
+
+  removeAlias(indexName: string, aliasName: string) {
+    const index = this.indices.get(indexName);
+    if (index) {
+      index.aliases.delete(aliasName);
+    }
+  }
+
+  getAliases(indexName: string): string[] {
+    const index = this.indices.get(indexName);
+    return index ? Array.from(index.aliases) : [];
   }
 
   deleteIndex(name: string): boolean {
     return this.indices.delete(name);
+  }
+
+  updateMapping(indexName: string, mapping: any) {
+    const index = this.indices.get(indexName);
+    if (!index) {
+      throw new Error(`Index [${indexName}] not found`);
+    }
+
+    if (mapping.properties) {
+      index.mappings.properties = {
+        ...index.mappings.properties,
+        ...mapping.properties,
+      };
+
+      // Re-initialize search index with updated fields
+      index.searchIndex = new (Document as any)({
+        document: {
+          id: 'id',
+          index: this.extractIndexedFields(index.mappings),
+          store: false,
+        },
+        tokenize: 'forward',
+      });
+
+      // Re-index existing documents
+      for (const [id, doc] of index.documents.entries()) {
+        index.searchIndex.add({ id, ...doc });
+      }
+    }
   }
 
   getAllIndices(): IndexState[] {
@@ -164,6 +232,14 @@ export class Store {
   getDocCount(indexName: string): number {
     const index = this.getIndex(indexName);
     return index ? index.documents.size : 0;
+  }
+
+  getTotalDocCount(): number {
+    let total = 0;
+    for (const index of this.indices.values()) {
+      total += index.documents.size;
+    }
+    return total;
   }
 
   bulk(body: any[]) {

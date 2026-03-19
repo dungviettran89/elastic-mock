@@ -143,6 +143,37 @@ export function createDocumentRouter() {
     }
   });
 
+  // Count API
+  router.get('/_count', (req, res) => {
+    logger.info(`Documents: Global _count request`);
+    const count = globalStore.getTotalDocCount();
+    res.json({
+      count,
+      _shards: { total: 1, successful: 1, skipped: 0, failed: 0 },
+    });
+  });
+
+  router.get('/:index/_count', (req, res) => {
+    const { index } = req.params;
+    logger.info(`Documents: _count request for [${index}]`);
+    if (!globalStore.hasIndex(index)) {
+      return res.status(404).json({
+        error: {
+          root_cause: [{ type: 'index_not_found_exception', reason: 'no such index', index: index }],
+          type: 'index_not_found_exception',
+          reason: 'no such index',
+          index: index,
+        },
+        status: 404,
+      });
+    }
+    const count = globalStore.getDocCount(index);
+    res.json({
+      count,
+      _shards: { total: 1, successful: 1, skipped: 0, failed: 0 },
+    });
+  });
+
   // Bulk API
   const handleBulk = (req: any, res: any) => {
     let body = req.body;

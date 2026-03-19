@@ -79,17 +79,35 @@ async function runFile(filePath: string) {
   }
 
   let teardownSteps: any[] = [];
+  let setupSteps: any[] = [];
   const tests: any[] = [];
 
   for (const doc of documents) {
     if (!doc) continue;
     if (doc.requires) continue;
+    if (doc.setup) {
+      setupSteps = doc.setup;
+      continue;
+    }
     if (doc.teardown) {
       teardownSteps = doc.teardown;
       continue;
     }
     for (const testName of Object.keys(doc)) {
       tests.push({ name: testName, steps: doc[testName] });
+    }
+  }
+
+  // Run Setup once for the file
+  if (setupSteps.length > 0) {
+    console.log(` ▶️ Running Setup`);
+    try {
+      for (const step of setupSteps) {
+        await runStep(step);
+      }
+    } catch (e: any) {
+      console.error(`   ❌ Setup Failed: ${e.message}`);
+      return;
     }
   }
 
@@ -104,12 +122,16 @@ async function runFile(filePath: string) {
     } catch (e: any) {
       console.error(`   ❌ Failed: ${e.message}`);
       allResults.push({ file: filePath, test: test.name, status: 'failed', error: e.message });
-    } finally {
-      for (const step of teardownSteps) {
-        try {
-          await runStep(step);
-        } catch (e) {}
-      }
+    }
+  }
+
+  // Run Teardown once for the file
+  if (teardownSteps.length > 0) {
+    console.log(` ▶️ Running Teardown`);
+    for (const step of teardownSteps) {
+      try {
+        await runStep(step);
+      } catch (e) {}
     }
   }
 }
