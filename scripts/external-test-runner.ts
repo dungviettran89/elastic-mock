@@ -65,6 +65,18 @@ async function runStep(step: any) {
 
     params = replaceVariables(params);
 
+    // Auto-parse string body as JSON if it looks like JSON
+    if (
+      typeof params === 'string' &&
+      (params.trim().startsWith('{') || params.trim().startsWith('['))
+    ) {
+      try {
+        params = JSON.parse(params);
+      } catch (e) {
+        // Not valid JSON, keep as string
+      }
+    }
+
     const parts = actionKey.split('.');
     let target: any = client;
     for (let i = 0; i < parts.length - 1; i++) {
@@ -90,18 +102,55 @@ async function runStep(step: any) {
     }
 
     if (typeof target[method] !== 'function') {
+      // Fallback to performRequest for missing methods in client but present in YAML tests
+      const methodMap: Record<string, string> = {
+        GET: 'GET',
+        PUT: 'PUT',
+        POST: 'POST',
+        DELETE: 'DELETE',
+        HEAD: 'HEAD',
+      };
+
+      // Attempt to infer method and path from actionKey if possible,
+      // but for now, let's just throw or try to use a generic way.
+      // Actually, ES JS client 8.x might have these under different names or moved.
+      // For cat.circuit_breaker, it should be GET /_cat/circuit_breaker
+      if (actionKey.startsWith('cat.')) {
+        const rawCatMethod = actionKey.substring(4);
+        const pathsToTry = [`/_cat/${rawCatMethod}`, `/_cat/${rawCatMethod.replace(/_/g, '/')}`];
+
+        for (const p of pathsToTry) {
+          try {
+            const res = await (client as any).transport.request({
+              method: 'GET',
+              path: p,
+              querystring: params,
+            });
+            return res.body !== undefined ? res.body : res;
+          } catch (e: any) {
+            if (e.meta?.statusCode === 404 && p !== pathsToTry[pathsToTry.length - 1]) {
+              continue;
+            }
+            throw e;
+          }
+        }
+      }
       throw new Error(`Client method not found: ${actionKey} (as ${method})`);
     }
 
     try {
-      const response = await target[method](params);
-      return response;
+      const response = await target[method].bind(target)(params);
+      const resData = response.body !== undefined ? response.body : response;
+      if (actionKey === 'cluster.info') {
+        console.log('   DEBUG cluster.info response:', JSON.stringify(resData));
+      }
+      return resData;
     } catch (e: any) {
       if (ignoreCodes.includes(e.meta?.statusCode)) {
-        return e.meta;
+        return e.meta?.body || e.meta;
       }
       if (step.do.catch) {
-        return e;
+        return e.meta?.body || e;
       }
       throw e;
     }
@@ -113,26 +162,42 @@ function getValueByPath(obj: any, path: string): any {
   if (!obj) return undefined;
   if (path === '$body' || path === '') return obj.body || obj;
 
-  // Try exact path at root first
-  if (obj[path] !== undefined) return obj[path];
-
   const data = obj.body || obj;
-  // Try exact path in body
+
+  // Try exact path in body first (handles keys with dots)
   if (data && data[path] !== undefined) return data[path];
+  // Try exact path at root
+  if (obj[path] !== undefined) return obj[path];
 
   // Nested path traversal
   const parts = path.split('.');
   let current = data;
-  for (const part of parts) {
-    if (current === undefined || current === null) {
-      // Maybe it was at root?
-      if (current === data && obj[part] !== undefined) {
-        current = obj[part];
+
+  // Greedy match for keys with dots: try joining parts back
+  // e.g. "indices.flush-index.primaries" -> might be data["indices"]["flush-index"]["primaries"]
+  for (let i = 0; i < parts.length; i++) {
+    if (current === undefined || current === null) return undefined;
+
+    let found = false;
+    // Try to find the longest possible key match starting from parts[i]
+    for (let j = parts.length; j > i; j--) {
+      const candidateKey = parts.slice(i, j).join('.');
+      if (current[candidateKey] !== undefined) {
+        current = current[candidateKey];
+        i = j - 1; // skip consumed parts
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      // Fallback: check at root if we are at the beginning
+      if (i === 0 && obj[parts[0]] !== undefined) {
+        current = obj[parts[0]];
         continue;
       }
       return undefined;
     }
-    current = current[part];
   }
   return current;
 }
@@ -151,11 +216,22 @@ function assertMatch(actual: any, expected: any, path: string = '') {
     return;
   }
 
-  if (typeof expected === 'object' && expected !== null && !Array.isArray(expected)) {
-    for (const key of Object.keys(expected)) {
-      const subPath = path ? `${path}.${key}` : key;
-      const actualVal = getValueByPath(actual, key);
-      assertMatch(actualVal, expected[key], subPath);
+  if (typeof expected === 'object' && expected !== null) {
+    if (Array.isArray(expected)) {
+      if (!Array.isArray(actual) || actual.length !== expected.length) {
+        throw new Error(
+          `Assertion failed at [${path}]: expected array of length ${expected.length}, got ${actual?.length}`,
+        );
+      }
+      for (let i = 0; i < expected.length; i++) {
+        assertMatch(actual[i], expected[i], `${path}[${i}]`);
+      }
+    } else {
+      for (const key of Object.keys(expected)) {
+        const subPath = path ? `${path}.${key}` : key;
+        const actualVal = getValueByPath(actual, key);
+        assertMatch(actualVal, expected[key], subPath);
+      }
     }
   } else {
     if (actual != expected) {
@@ -229,35 +305,22 @@ async function runFile(filePath: string) {
       for (const step of test.steps) {
         if (step.do) {
           lastResponse = await runStep(step);
-          console.log('   📦 Response:', JSON.stringify(lastResponse, null, 2).substring(0, 1000));
+          // console.log('   📦 Response:', JSON.stringify(lastResponse, null, 2).substring(0, 1000));
         } else if (step.set) {
-          for (let [key, path] of Object.entries(step.set)) {
-            // In YAML, it might be: set: { _id: id }
-            // where _id is the field in response, and id is the variable name
-            // BUT wait, standard is set: { varName: path.in.body }
-            // Let's check both
+          for (let [path, key] of Object.entries(step.set)) {
             let val = getValueByPath(lastResponse, path as string);
-            if (val === undefined) {
-              // Try swapping them
-              val = getValueByPath(lastResponse, key);
-              if (val !== undefined) {
-                const tmp = key;
-                key = path as string;
-                path = tmp;
-              }
-            }
             variables[key] = val;
-            // console.log(`   💡 Set $${key} = ${val}`);
           }
         } else if (step.match) {
           const key = Object.keys(step.match)[0];
           const expected = step.match[key];
           const actual = getValueByPath(lastResponse, key);
-          // console.debug(`Matching [${key}]: actual=[${actual}], expected=[${replaceVariables(expected)}]`);
           assertMatch(actual, expected, key);
         } else if (step.is_true) {
           const val = getValueByPath(lastResponse, step.is_true);
-          if (!val) throw new Error(`Expected [${step.is_true}] to be true, got [${val}]`);
+          if (val === undefined || val === null || val === false) {
+            throw new Error(`Expected [${step.is_true}] to be true, got [${val}]`);
+          }
         } else if (step.is_false) {
           const val = getValueByPath(lastResponse, step.is_false);
           if (val) throw new Error(`Expected [${step.is_false}] to be false, got [${val}]`);

@@ -9,10 +9,53 @@ export interface IndexState {
   aliases: Set<string>;
   documents: Map<string, any>;
   searchIndex: any; // FlexSearch Document instance
+  status: 'open' | 'close';
 }
 
 export class Store {
   private indices: Map<string, IndexState> = new Map();
+  private templates: Map<string, any> = new Map();
+  private indexTemplates: Map<string, any> = new Map();
+  private ingestPipelines: Map<string, any> = new Map();
+  private geoipDatabases: Map<string, any> = new Map();
+  private synonymsSets: Map<string, any> = new Map();
+  private synonymRules: Map<string, Map<string, any>> = new Map();
+  private roleMappings: Map<string, any> = new Map();
+
+  // Template Management
+  // ...
+  // (Assuming I can add it at the end of the class)
+  putTemplate(name: string, body: any) {
+    this.templates.set(name, body);
+  }
+
+  getTemplate(name: string): any {
+    return this.templates.get(name);
+  }
+
+  getAllTemplates(): Map<string, any> {
+    return this.templates;
+  }
+
+  deleteTemplate(name: string): boolean {
+    return this.templates.delete(name);
+  }
+
+  putIndexTemplate(name: string, body: any) {
+    this.indexTemplates.set(name, body);
+  }
+
+  getIndexTemplate(name: string): any {
+    return this.indexTemplates.get(name);
+  }
+
+  getAllIndexTemplates(): Map<string, any> {
+    return this.indexTemplates;
+  }
+
+  deleteIndexTemplate(name: string): boolean {
+    return this.indexTemplates.delete(name);
+  }
 
   createIndex(name: string, body: any) {
     if (this.indices.has(name)) {
@@ -44,6 +87,7 @@ export class Store {
       aliases,
       documents: new Map(),
       searchIndex,
+      status: 'open',
     });
   }
 
@@ -61,6 +105,24 @@ export class Store {
     }
 
     return undefined;
+  }
+
+  closeIndex(name: string): boolean {
+    const index = this.getIndex(name);
+    if (index) {
+      index.status = 'close';
+      return true;
+    }
+    return false;
+  }
+
+  openIndex(name: string): boolean {
+    const index = this.getIndex(name);
+    if (index) {
+      index.status = 'open';
+      return true;
+    }
+    return false;
   }
 
   hasIndex(name: string): boolean {
@@ -235,30 +297,88 @@ export class Store {
     };
   }
 
+  private matchesQuery(doc: any, query: any): boolean {
+    if (!query) return true;
+
+    if (query.match_all) {
+      return true;
+    }
+
+    if (query.term) {
+      const [field, value] = Object.entries(query.term)[0];
+      return doc[field] === value;
+    }
+
+    if (query.match) {
+      const [field, searchValue] = Object.entries(query.match)[0];
+      const docValue = doc[field];
+      if (docValue === undefined) return false;
+      return String(docValue).toLowerCase().includes(String(searchValue).toLowerCase());
+    }
+
+    if (query.bool) {
+      const must = query.bool.must || [];
+      const filter = query.bool.filter || [];
+      const mustNot = query.bool.must_not || [];
+      const should = query.bool.should || [];
+
+      // Must
+      for (const q of Array.isArray(must) ? must : [must]) {
+        if (!this.matchesQuery(doc, q)) return false;
+      }
+      // Filter
+      for (const q of Array.isArray(filter) ? filter : [filter]) {
+        if (!this.matchesQuery(doc, q)) return false;
+      }
+      // Must Not
+      for (const q of Array.isArray(mustNot) ? mustNot : [mustNot]) {
+        if (this.matchesQuery(doc, q)) return false;
+      }
+      // Should
+      if (Array.isArray(should) && should.length > 0) {
+        let matched = false;
+        for (const q of should) {
+          if (this.matchesQuery(doc, q)) {
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) return false;
+      }
+      return true;
+    }
+
+    // Default: don't match if we don't understand the query
+    return false;
+  }
+
   deleteByQuery(indexName: string, body: any) {
     const index = this.getIndex(indexName);
     if (!index) {
       throw new Error(`Index [${indexName}] not found`);
     }
 
-    const count = index.documents.size;
-    // We'll simulate deleting only 1 document if many exist
-    const deletedCount = count > 0 ? 1 : 0;
+    const query = body.query || { match_all: {} };
+    const deletedIds: string[] = [];
 
-    if (deletedCount > 0) {
-      // Actually delete the first document found just to be somewhat real
-      const firstId = index.documents.keys().next().value;
-      if (firstId) {
-        index.documents.delete(firstId);
-        index.searchIndex.remove(firstId);
+    // Find all documents matching the query
+    for (const [id, doc] of index.documents.entries()) {
+      if (this.matchesQuery(doc, query)) {
+        deletedIds.push(id);
       }
+    }
+
+    // Delete matching documents
+    for (const id of deletedIds) {
+      index.documents.delete(id);
+      index.searchIndex.remove(id);
     }
 
     return {
       took: 1,
       timed_out: false,
-      total: count,
-      deleted: deletedCount,
+      total: index.documents.size + deletedIds.length,
+      deleted: deletedIds.length,
       batches: 1,
       version_conflicts: 0,
       noops: 0,
@@ -425,6 +545,10 @@ export class Store {
         hits: paginatedHits,
       },
     };
+
+    if (body.pit) {
+      response.pit_id = body.pit.id;
+    }
 
     if (body.aggs || body.aggregations) {
       response.aggregations = globalAggregator.process(hits, body.aggs || body.aggregations);
@@ -605,6 +729,166 @@ export class Store {
     return Object.entries(mappings.properties)
       .filter(([_, value]: [string, any]) => value.type === 'text' || value.type === 'keyword')
       .map(([key, _]) => key);
+  }
+
+  // Ingest Pipelines
+  putPipeline(id: string, body: any) {
+    this.ingestPipelines.set(id, body);
+  }
+
+  getPipeline(id: string): any {
+    return this.ingestPipelines.get(id);
+  }
+
+  getAllPipelines(): Map<string, any> {
+    return this.ingestPipelines;
+  }
+
+  deletePipeline(id: string): boolean {
+    return this.ingestPipelines.delete(id);
+  }
+
+  // GeoIP Databases
+  putGeoIPDatabase(id: string, body: any) {
+    this.geoipDatabases.set(id, {
+      ...body,
+      modified_date_millis: Date.now(),
+    });
+  }
+
+  getGeoIPDatabase(id?: string): any[] {
+    if (id) {
+      // Handle comma-separated IDs
+      const ids = id.split(',').map((s) => s.trim());
+      const databases: any[] = [];
+      for (const dbId of ids) {
+        const db = this.geoipDatabases.get(dbId);
+        if (db) {
+          databases.push({
+            id: dbId,
+            modified_date_millis: db.modified_date_millis,
+            database: {
+              name: db.name,
+              maxmind: db.maxmind,
+            },
+          });
+        }
+      }
+      return databases;
+    }
+    // Return all databases
+    return Array.from(this.geoipDatabases.entries()).map(([dbId, db]: [string, any]) => ({
+      id: dbId,
+      modified_date_millis: db.modified_date_millis,
+      database: {
+        name: db.name,
+        maxmind: db.maxmind,
+      },
+    }));
+  }
+
+  deleteGeoIPDatabase(id: string): boolean {
+    return this.geoipDatabases.delete(id);
+  }
+
+  // Synonyms Sets
+  putSynonymSet(id: string, body: any) {
+    this.synonymsSets.set(id, {
+      ...body,
+      modified_time_millis: Date.now(),
+    });
+    return { result: 'created' };
+  }
+
+  getSynonymSet(id: string): any {
+    const set = this.synonymsSets.get(id);
+    if (!set) return null;
+    return {
+      ...set,
+      modified_time_millis: set.modified_time_millis,
+    };
+  }
+
+  getAllSynonymSets(): any[] {
+    return Array.from(this.synonymsSets.entries()).map(([id, set]) => ({
+      synonyms_set: id,
+      modified_time_millis: set.modified_time_millis,
+    }));
+  }
+
+  deleteSynonymSet(id: string): boolean {
+    this.synonymRules.delete(id);
+    return this.synonymsSets.delete(id);
+  }
+
+  // Synonym Rules
+  putSynonymRule(setId: string, ruleId: string, body: any) {
+    if (!this.synonymRules.has(setId)) {
+      this.synonymRules.set(setId, new Map());
+    }
+    this.synonymRules.get(setId)!.set(ruleId, {
+      ...body,
+      modified_time_millis: Date.now(),
+    });
+    return { result: 'created' };
+  }
+
+  getSynonymRule(setId: string, ruleId: string): any {
+    const setRules = this.synonymRules.get(setId);
+    if (!setRules) return null;
+    const rule = setRules.get(ruleId);
+    if (!rule) return null;
+    return { ...rule };
+  }
+
+  deleteSynonymRule(setId: string, ruleId: string): boolean {
+    const setRules = this.synonymRules.get(setId);
+    if (!setRules) return false;
+    return setRules.delete(ruleId);
+  }
+
+  // Role Mappings
+  putRoleMapping(name: string, body: any) {
+    this.roleMappings.set(name, body);
+    return { role_mapping: { created: true } };
+  }
+
+  getRoleMapping(name?: string): any {
+    if (name) {
+      const mapping = this.roleMappings.get(name);
+      if (!mapping) return {};
+      return { [name]: mapping };
+    }
+    // Return all mappings
+    const result: any = {};
+    for (const [name, mapping] of this.roleMappings.entries()) {
+      result[name] = mapping;
+    }
+    return result;
+  }
+
+  deleteRoleMapping(name: string): boolean {
+    return this.roleMappings.delete(name);
+  }
+
+  cloneIndex(sourceIndexName: string, targetIndexName: string) {
+    const sourceIndex = this.indices.get(sourceIndexName);
+    if (!sourceIndex) {
+      throw new Error(`Index [${sourceIndexName}] not found`);
+    }
+
+    this.createIndex(targetIndexName, {
+      mappings: sourceIndex.mappings,
+      settings: sourceIndex.settings,
+    });
+
+    const targetIndex = this.indices.get(targetIndexName);
+    if (targetIndex) {
+      for (const [id, doc] of sourceIndex.documents.entries()) {
+        targetIndex.documents.set(id, doc);
+        targetIndex.searchIndex.add({ id, ...doc });
+      }
+    }
   }
 }
 

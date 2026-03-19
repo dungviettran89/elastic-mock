@@ -64,7 +64,7 @@ export function createSearchRouter() {
     const from = req.body?.from || 0;
     const paginatedHits = allHits.slice(from, from + size);
 
-    res.json({
+    const response: any = {
       took: 1,
       timed_out: false,
       _shards: { total: indices.length, successful: indices.length, skipped: 0, failed: 0 },
@@ -73,7 +73,13 @@ export function createSearchRouter() {
         max_score: allHits.length > 0 ? 1.0 : null,
         hits: paginatedHits,
       },
-    });
+    };
+
+    if (req.body?.pit) {
+      response.pit_id = req.body.pit.id;
+    }
+
+    res.json(response);
   });
 
   return router;

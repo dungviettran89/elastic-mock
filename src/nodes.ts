@@ -5,7 +5,7 @@ export function createNodesRouter() {
 
   const nodesMock = {
     _nodes: { total: 1, successful: 1, failed: 0 },
-    cluster_name: 'elasticsearch',
+    cluster_name: 'elastic-mock',
     nodes: {
       'mock-node-id': {
         name: 'elastic-mock',

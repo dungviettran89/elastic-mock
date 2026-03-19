@@ -168,3 +168,43 @@ crudRouter.delete('/:index/_doc/:id', (req, res) => {
     });
   }
 });
+
+// Delete by Query API
+crudRouter.post(['/_delete_by_query', '/:index/_delete_by_query'], (req, res) => {
+  const { index } = req.params;
+  try {
+    const result = globalStore.deleteByQuery(index, req.body || {});
+    res.json(result);
+  } catch (error: any) {
+    logger.error(`Documents: Delete by query failed in [${index}]: ${error.message}`);
+    res.status(404).json({
+      error: {
+        root_cause: [{ type: 'index_not_found_exception', reason: error.message, index: index }],
+        type: 'index_not_found_exception',
+        reason: error.message,
+        index: index,
+      },
+      status: 404,
+    });
+  }
+});
+
+// Update by Query API
+crudRouter.post(['/_update_by_query', '/:index/_update_by_query'], (req, res) => {
+  const { index } = req.params;
+  const count = index ? globalStore.getDocCount(index) : globalStore.getTotalDocCount();
+  res.json({
+    took: 1,
+    timed_out: false,
+    total: count,
+    updated: count,
+    batches: 1,
+    version_conflicts: 0,
+    noops: 0,
+    retries: { bulk: 0, search: 0 },
+    throttled_millis: 0,
+    requests_per_second: -1,
+    throttled_until_millis: 0,
+    failures: [],
+  });
+});

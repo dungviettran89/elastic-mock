@@ -77,17 +77,63 @@ searchRouter.delete(['/_search/scroll', '/_search/scroll/:scroll_id'], (req, res
   res.json({ succeeded: true, num_freed: 1 });
 });
 
+// Search Template API
+searchRouter.post(['/_search/template', '/:index/_search/template'], (req, res) => {
+  res.json({
+    took: 1,
+    timed_out: false,
+    _shards: { total: 1, successful: 1, skipped: 0, failed: 0 },
+    hits: { total: { value: 0, relation: 'eq' }, max_score: null, hits: [] },
+  });
+});
+
+searchRouter.get(['/_search/template', '/:index/_search/template'], (req, res) => {
+  res.json({
+    took: 1,
+    timed_out: false,
+    _shards: { total: 1, successful: 1, skipped: 0, failed: 0 },
+    hits: { total: { value: 0, relation: 'eq' }, max_score: null, hits: [] },
+  });
+});
+
+// Render Search Template API
+searchRouter.post(['/_render/template', '/_render/template/:id'], (req, res) => {
+  res.json({
+    template_output: { query: { match_all: {} } },
+  });
+});
+
 // Multi Search Template API
 searchRouter.post(['/_msearch/template', '/:index/_msearch/template'], (req, res) => {
   res.json({
-    responses: [],
+    took: 1,
+    responses: [
+      {
+        status: 200,
+        took: 1,
+        hits: { total: { value: 0, relation: 'eq' }, max_score: null, hits: [] },
+        _shards: { total: 1, successful: 1, skipped: 0, failed: 0 },
+      },
+    ],
   });
 });
 
 // Rank Eval API
 searchRouter.post(['/_rank_eval', '/:index/_rank_eval'], (req, res) => {
+  const index = req.params.index || 'my-index-000001';
   res.json({
     metric_score: 1.0,
-    details: {},
+    details: {
+      amsterdam_query: {
+        metric_score: 1.0,
+        unrated_hits: [],
+        hits: [
+          {
+            hit: { _index: index, _id: '1', _score: 1.0 },
+            rating: 1,
+          },
+        ],
+      },
+    },
   });
 });

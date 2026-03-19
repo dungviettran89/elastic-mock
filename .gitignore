@@ -148,6 +148,8 @@ vite.config.ts.timestamp-*
 # AI
 *.local.json
 *.local.md
+GEMINI.md
+QWEN.md
 
 # External Tests
 external-tests/

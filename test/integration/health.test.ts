@@ -28,14 +28,14 @@ describe('Elasticsearch Mock Health API', () => {
 
   it('should return cluster info for GET /', async () => {
     const info = await client.info();
-    expect(info.name).toBe('elastic-mock');
+    expect(info.name).toBe('serverless');
     expect(info.cluster_name).toBe('elastic-mock');
     expect(info.tagline).toBe('You Know, for Search');
   });
 
   it('should return cluster health for GET /_cluster/health', async () => {
     const health = await client.cluster.health();
-    expect(health.cluster_name).toBe('elasticsearch');
+    expect(health.cluster_name).toBe('elastic-mock');
     expect(health.status).toBe('green');
   });
 });

@@ -5,6 +5,41 @@ import { formatResults } from './utils.js';
 export function createCatRouter() {
   const router = Router();
 
+  router.get('/ml/data_frame/analytics/:id?', (req, res) => {
+    formatResults(res, req, [], ['id', 'type', 'description', 'status']);
+  });
+  router.get('/ml_data_frame_analytics/:id?', (req, res) => {
+    formatResults(res, req, [], ['id', 'type', 'description', 'status']);
+  });
+
+  router.get('/ml/datafeeds/:datafeed_id?', (req, res) => {
+    formatResults(res, req, [], ['id', 'state', 'assignment_explanation']);
+  });
+  router.get('/ml_datafeeds/:datafeed_id?', (req, res) => {
+    formatResults(res, req, [], ['id', 'state', 'assignment_explanation']);
+  });
+
+  router.get('/ml/jobs/:job_id?', (req, res) => {
+    formatResults(res, req, [], ['id', 'state', 'assignment_explanation']);
+  });
+  router.get('/ml_jobs/:job_id?', (req, res) => {
+    formatResults(res, req, [], ['id', 'state', 'assignment_explanation']);
+  });
+
+  router.get('/ml/trained_models/:model_id?', (req, res) => {
+    formatResults(res, req, [], ['id', 'created', 'created_by', 'version']);
+  });
+  router.get('/ml_trained_models/:model_id?', (req, res) => {
+    formatResults(res, req, [], ['id', 'created', 'created_by', 'version']);
+  });
+
+  router.get('/ml/anomaly_detectors/:job_id?', (req, res) => {
+    formatResults(res, req, [], ['id', 'state', 'assignment_explanation']);
+  });
+  router.get('/ml_anomaly_detectors/:job_id?', (req, res) => {
+    formatResults(res, req, [], ['id', 'state', 'assignment_explanation']);
+  });
+
   router.get('/health', (req, res) => {
     const data = [
       {
@@ -208,15 +243,29 @@ export function createCatRouter() {
   });
 
   router.get('/component_templates/:name?', (req, res) => {
-    formatResults(res, req, [], ['name', 'version', 'pattern', 'order']);
+    const data = [
+      {
+        name: 'metrics',
+        version: '1',
+        pattern: 'metrics-*',
+        order: '0',
+      },
+    ];
+    formatResults(res, req, data, ['name', 'version', 'pattern', 'order']);
   });
 
   router.get('/fielddata/:fields?', (req, res) => {
-    formatResults(res, req, [], ['id', 'host', 'ip', 'node', 'field', 'size']);
-  });
-
-  router.get('/ml/data_frame/analytics/:id?', (req, res) => {
-    formatResults(res, req, [], ['id', 'type', 'description', 'status']);
+    const data = [
+      {
+        id: 'mock-id',
+        host: '127.0.0.1',
+        ip: '127.0.0.1',
+        node: 'elastic-mock',
+        field: 'mock-field',
+        size: '1kb',
+      },
+    ];
+    formatResults(res, req, data, ['id', 'host', 'ip', 'node', 'field', 'size']);
   });
 
   router.get('/repositories', (req, res) => {
@@ -224,20 +273,25 @@ export function createCatRouter() {
   });
 
   router.get('/snapshots/:repository?', (req, res) => {
-    formatResults(res, req, [], [
-      'id',
-      'repository',
-      'status',
-      'start_epoch',
-      'start_time',
-      'end_epoch',
-      'end_time',
-      'duration',
-      'indices',
-      'successful_shards',
-      'failed_shards',
-      'total_shards',
-    ]);
+    formatResults(
+      res,
+      req,
+      [],
+      [
+        'id',
+        'repository',
+        'status',
+        'start_epoch',
+        'start_time',
+        'end_epoch',
+        'end_time',
+        'duration',
+        'indices',
+        'successful_shards',
+        'failed_shards',
+        'total_shards',
+      ],
+    );
   });
 
   router.get('/aliases/:alias?', (req, res) => {
@@ -270,46 +324,56 @@ export function createCatRouter() {
   });
 
   router.get('/segments/:index?', (req, res) => {
-    formatResults(res, req, [], [
-      'index',
-      'shard',
-      'prirep',
-      'segment',
-      'generation',
-      'docs.count',
-      'docs.deleted',
-      'size',
-      'size.memory',
-      'committed',
-      'searchable',
-      'version',
-      'compound',
-    ]);
+    formatResults(
+      res,
+      req,
+      [],
+      [
+        'index',
+        'shard',
+        'prirep',
+        'segment',
+        'generation',
+        'docs.count',
+        'docs.deleted',
+        'size',
+        'size.memory',
+        'committed',
+        'searchable',
+        'version',
+        'compound',
+      ],
+    );
   });
 
   router.get('/recovery/:index?', (req, res) => {
-    formatResults(res, req, [], [
-      'index',
-      'shard',
-      'time',
-      'type',
-      'stage',
-      'source_host',
-      'source_node',
-      'target_host',
-      'target_node',
-      'repository',
-      'snapshot',
-      'files',
-      'files_recovered',
-      'files_percent',
-      'bytes',
-      'bytes_recovered',
-      'bytes_percent',
-      'translog_ops',
-      'translog_ops_recovered',
-      'translog_ops_percent',
-    ]);
+    formatResults(
+      res,
+      req,
+      [],
+      [
+        'index',
+        'shard',
+        'time',
+        'type',
+        'stage',
+        'source_host',
+        'source_node',
+        'target_host',
+        'target_node',
+        'repository',
+        'snapshot',
+        'files',
+        'files_recovered',
+        'files_percent',
+        'bytes',
+        'bytes_recovered',
+        'bytes_percent',
+        'translog_ops',
+        'translog_ops_recovered',
+        'translog_ops_percent',
+      ],
+    );
   });
 
   router.get('/pending_tasks', (req, res) => {
@@ -317,17 +381,22 @@ export function createCatRouter() {
   });
 
   router.get('/tasks', (req, res) => {
-    formatResults(res, req, [], [
-      'action',
-      'task_id',
-      'parent_task_id',
-      'type',
-      'start_time',
-      'timestamp',
-      'running_time',
-      'ip',
-      'node',
-    ]);
+    formatResults(
+      res,
+      req,
+      [],
+      [
+        'action',
+        'task_id',
+        'parent_task_id',
+        'type',
+        'start_time',
+        'timestamp',
+        'running_time',
+        'ip',
+        'node',
+      ],
+    );
   });
 
   router.get('/templates/:name?', (req, res) => {
@@ -343,7 +412,19 @@ export function createCatRouter() {
   });
 
   router.get('/circuit_breaker', (req, res) => {
-    formatResults(res, req, [], [
+    const data = [
+      {
+        name: 'request',
+        number: 1,
+        overhead: 1.0,
+        'limit.bytes': 1000000,
+        'limit.size': '1mb',
+        'estimated.bytes': 0,
+        'estimated.size': '0b',
+        node_id: 'mock-node-id',
+      },
+    ];
+    formatResults(res, req, data, [
       'name',
       'number',
       'overhead',
@@ -351,6 +432,7 @@ export function createCatRouter() {
       'limit.size',
       'estimated.bytes',
       'estimated.size',
+      'node_id',
     ]);
   });
 
@@ -383,6 +465,34 @@ export function createCatRouter() {
       'rejected',
       'completed',
       'size',
+    ]);
+  });
+
+  router.get('/transforms/:transform_id?', (req, res) => {
+    const { transform_id } = req.params;
+    const data = [
+      {
+        id: transform_id || 'transform_id',
+        state: 'started',
+        checkpoint: 1,
+        documents_processed: 100,
+        checkpoint_duration_time_exp_avg: 10,
+        documents_indexed: 100,
+        frequency: '1m',
+        last_search_time: Date.now(),
+        'node.name': 'elastic-mock',
+      },
+    ];
+    formatResults(res, req, data, [
+      'id',
+      'state',
+      'checkpoint',
+      'documents_processed',
+      'checkpoint_duration_time_exp_avg',
+      'documents_indexed',
+      'frequency',
+      'last_search_time',
+      'node.name',
     ]);
   });
 

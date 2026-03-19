@@ -49,7 +49,7 @@ export function createServer() {
   // Basic ES info endpoint
   app.get('/', (req, res) => {
     res.json({
-      name: 'elastic-mock',
+      name: 'serverless',
       cluster_name: 'elastic-mock',
       cluster_uuid: 'z1234567890',
       version: {
@@ -77,7 +77,6 @@ export function createServer() {
 
   // Cluster APIs
   app.use('/_cluster', createClusterRouter());
-
 
   // Shortcuts for common root-level APIs
   app.get('/_health', (req, res) => res.redirect('/_cluster/health'));

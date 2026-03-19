@@ -6,7 +6,7 @@ export function createClusterRouter() {
 
   router.get('/health', (req, res) => {
     res.json({
-      cluster_name: 'elasticsearch',
+      cluster_name: 'elastic-mock',
       status: 'green',
       timed_out: false,
       number_of_nodes: 1,
@@ -24,11 +24,20 @@ export function createClusterRouter() {
     });
   });
 
+  router.get('/info', (req, res) => {
+    res.json({
+      cluster_name: 'elastic-mock',
+      cluster_uuid: 'mock-uuid',
+      version: { number: '8.10.0' },
+      tagline: 'You know, for Search',
+    });
+  });
+
   router.get('/state/:metric?', (req, res) => {
     const { metric } = req.params;
 
     const state: any = {
-      cluster_name: 'elasticsearch',
+      cluster_name: 'elastic-mock',
       cluster_uuid: 'z1234567890',
     };
 
@@ -64,12 +73,24 @@ export function createClusterRouter() {
   });
 
   router.post('/allocation/explain', (req, res) => {
+    const { index, shard } = { ...req.query, ...req.body } as any;
     res.json({
-      index: 'mock',
-      shard: 0,
+      index: index || 'allocation_explain',
+      shard: parseInt(shard as string) || 0,
       primary: true,
       current_state: 'started',
-      current_node: { id: 'mock-node', name: 'mock-node' }
+      current_node: { id: 'mock-node', name: 'mock-node' },
+    });
+  });
+
+  router.get('/allocation/explain', (req, res) => {
+    const { index, shard } = { ...req.query, ...req.body } as any;
+    res.json({
+      index: index || 'allocation_explain',
+      shard: parseInt(shard as string) || 0,
+      primary: true,
+      current_state: 'started',
+      current_node: { id: 'mock-node', name: 'mock-node' },
     });
   });
 
@@ -84,9 +105,9 @@ export function createClusterRouter() {
   router.get('/stats', (req, res) => {
     res.json({
       _nodes: { total: 1, successful: 1, failed: 0 },
-      cluster_name: 'elasticsearch',
+      cluster_name: 'elastic-mock',
       cluster_uuid: 'z1234567890',
-      status: 'green'
+      status: 'green',
     });
   });
 
