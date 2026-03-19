@@ -27,6 +27,34 @@ export function createDocumentRouter() {
     }
   });
 
+  router.put('/:index/_create/:id', (req, res) => {
+    const { index, id } = req.params;
+    logger.info(`Documents: Creating [${id}] in [${index}]`);
+    try {
+      // op_type=create should fail if exists, but for mock we just index
+      const result = globalStore.indexDocument(index, id, req.body);
+      res.status(201).json(result);
+    } catch (error: any) {
+      res.status(404).json({
+        error: {
+          root_cause: [{ type: 'index_not_found_exception', reason: error.message, index: index }],
+          type: 'index_not_found_exception',
+          reason: error.message,
+          index: index,
+        },
+        status: 404,
+      });
+    }
+  });
+
+  // Validate Query API
+  router.post(['/_validate/query', '/:index/_validate/query'], (req, res) => {
+    res.json({
+      valid: true,
+      _shards: { total: 1, successful: 1, failed: 0 },
+    });
+  });
+
   // Index Document without ID (POST)
   router.post('/:index/_doc', (req, res) => {
     const { index } = req.params;
@@ -119,13 +147,14 @@ export function createDocumentRouter() {
 
   // Multi Search API
   const handleMsearch = (req: any, res: any) => {
+    const { index } = req.params;
     logger.info(`Documents: msearch request`);
     let body = req.body;
     if (typeof body === 'string') {
       const lines = body.trim().split('\n');
       body = lines.map((l) => JSON.parse(l));
     }
-    const result = globalStore.msearch(body);
+    const result = globalStore.msearch(body, index);
     res.json(result);
   };
   router.post('/_msearch', handleMsearch);

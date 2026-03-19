@@ -10,7 +10,7 @@ export function createSearchRouter() {
     const { index } = req.params;
     logger.info(`Search: Querying index [${index}]`);
     try {
-      const result = globalStore.search(index, req.body || {});
+      const result = globalStore.search(index, { ...req.query, ...req.body });
       res.json(result);
     } catch (error: any) {
       logger.error(`Search: Query failed on [${index}]: ${error.message}`);
@@ -30,7 +30,7 @@ export function createSearchRouter() {
     const { index } = req.params;
     logger.info(`Search: GET Querying index [${index}]`);
     try {
-      const result = globalStore.search(index, req.body || {});
+      const result = globalStore.search(index, { ...req.query, ...req.body });
       res.json(result);
     } catch (error: any) {
       logger.error(`Search: GET Query failed on [${index}]: ${error.message}`);
@@ -53,7 +53,7 @@ export function createSearchRouter() {
     let allHits: any[] = [];
     indices.forEach((idx) => {
       try {
-        const result = globalStore.search(idx.name, req.body || {});
+        const result = globalStore.search(idx.name, { ...req.query, ...req.body });
         allHits = allHits.concat(result.hits.hits);
       } catch (e) {
         // Skip

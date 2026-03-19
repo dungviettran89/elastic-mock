@@ -6,7 +6,7 @@ export function createClusterRouter() {
 
   router.get('/health', (req, res) => {
     res.json({
-      cluster_name: 'elastic-mock',
+      cluster_name: 'elasticsearch',
       status: 'green',
       timed_out: false,
       number_of_nodes: 1,

@@ -139,6 +139,16 @@ function getValueByPath(obj: any, path: string): any {
 
 function assertMatch(actual: any, expected: any, path: string = '') {
   expected = replaceVariables(expected);
+  
+  if (typeof expected === 'string' && expected.startsWith('/') && expected.endsWith('/')) {
+    const regexStr = expected.substring(1, expected.length - 1);
+    const regex = new RegExp(regexStr);
+    if (!regex.test(String(actual))) {
+      throw new Error(`Assertion failed at [${path}]: expected to match [${expected}], got [${actual}]`);
+    }
+    return;
+  }
+
   if (typeof expected === 'object' && expected !== null && !Array.isArray(expected)) {
     for (const key of Object.keys(expected)) {
       const subPath = path ? `${path}.${key}` : key;
@@ -217,7 +227,7 @@ async function runFile(filePath: string) {
       for (const step of test.steps) {
         if (step.do) {
           lastResponse = await runStep(step);
-          // console.log('   📦 Response:', JSON.stringify(lastResponse, null, 2).substring(0, 500));
+          console.log('   📦 Response:', JSON.stringify(lastResponse, null, 2).substring(0, 1000));
         } else if (step.set) {
           for (let [key, path] of Object.entries(step.set)) {
             // In YAML, it might be: set: { _id: id } 

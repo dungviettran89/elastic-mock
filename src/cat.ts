@@ -174,20 +174,33 @@ export function createCatRouter() {
       : globalStore.getAllIndices();
 
     const data: any[] = [];
-    indices.forEach((idx) => {
-      if (idx) {
-        data.push({
-          index: idx.name,
-          shard: '0',
-          prirep: 'p',
-          state: 'STARTED',
-          docs: idx.documents.size,
-          store: '1kb',
-          ip: '127.0.0.1',
-          node: 'elastic-mock',
-        });
-      }
-    });
+    if (indices.length === 0) {
+      data.push({
+        index: 'mock-index',
+        shard: '0',
+        prirep: 'p',
+        state: 'STARTED',
+        docs: '0',
+        store: '1kb',
+        ip: '127.0.0.1',
+        node: 'elastic-mock',
+      });
+    } else {
+      indices.forEach((idx) => {
+        if (idx) {
+          data.push({
+            index: idx.name,
+            shard: '0',
+            prirep: 'p',
+            state: 'STARTED',
+            docs: idx.documents.size,
+            store: '1kb',
+            ip: '127.0.0.1',
+            node: 'elastic-mock',
+          });
+        }
+      });
+    }
 
     formatResults(res, req, data, [
       'index',
@@ -221,7 +234,7 @@ export function createCatRouter() {
     const indicesCount = globalStore.getAllIndices().length;
     const data = [
       {
-        shards: indicesCount,
+        shards: indicesCount || 1,
         'disk.indices': '1kb',
         'disk.used': '100mb',
         'disk.avail': '50gb',
@@ -270,6 +283,10 @@ export function createCatRouter() {
     formatResults(res, req, [], ['node', 'host', 'ip', 'attr', 'value']);
   });
 
+  router.get('/circuit_breaker', (req, res) => {
+    formatResults(res, req, [], ['name', 'number', 'overhead', 'limit.bytes', 'limit.size', 'estimated.bytes', 'estimated.size']);
+  });
+
   router.get('/thread_pool/:thread_pool_patterns?', (req, res) => {
     const data = [
       {
@@ -296,6 +313,7 @@ export function createCatRouter() {
 
   router.get('/', (req, res) => {
     const helpText = `
+=^.^=
 /_cat/allocation
 /_cat/shards
 /_cat/shards/{index}
@@ -314,6 +332,7 @@ export function createCatRouter() {
 /_cat/pending_tasks
 /_cat/aliases
 /_cat/aliases/{alias}
+/_cat/circuit_breaker
 /_cat/thread_pool
 /_cat/thread_pool/{thread_pools}
 /_cat/plugins
