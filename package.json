@@ -1,6 +1,6 @@
 {
-  "name": "elastic-mock",
-  "version": "0.1.0",
+  "name": "@dungvietran89/elastic-mock",
+  "version": "0.1.1",
   "description": "A lightweight, high-performance, in-memory Elasticsearch mock server backed by FlexSearch.",
   "main": "dist/index.js",
   "type": "module",
