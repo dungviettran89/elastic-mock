@@ -8,6 +8,9 @@ const client = new Client({
   node: 'http://localhost:19200',
 });
 
+// Mock headers method for tests that expect it (some versions of the client or YAML runner)
+(client as any).headers = () => ({});
+
 interface TestResult {
   file: string;
   test: string;
@@ -53,8 +56,13 @@ function replaceVariables(obj: any): any {
 
 async function runStep(step: any) {
   if (step.do) {
-    const actionKey = Object.keys(step.do)[0];
+    let actionKey = Object.keys(step.do).find(k => k !== 'catch' && k !== 'headers' && k !== 'node_selector' && k !== 'warnings');
+    if (!actionKey) {
+      if (step.do.catch) return null; // Just a catch with no action? Should not happen normally.
+      actionKey = Object.keys(step.do)[0];
+    }
     let params = step.do[actionKey];
+    const headers = step.do.headers || {};
 
     // Handle ignore parameter
     let ignoreCodes: number[] = [];
@@ -74,6 +82,16 @@ async function runStep(step: any) {
         params = JSON.parse(params);
       } catch (e) {
         // Not valid JSON, keep as string
+      }
+    }
+
+    // Also auto-parse params.body if it's a string JSON
+    if (params && typeof params === 'object' && typeof params.body === 'string' && 
+        (params.body.trim().startsWith('{') || params.body.trim().startsWith('['))) {
+      try {
+        params.body = JSON.parse(params.body);
+      } catch (e) {
+        // Not valid JSON
       }
     }
 
@@ -101,20 +119,100 @@ async function runStep(step: any) {
       method = rawMethod;
     }
 
-    if (typeof target[method] !== 'function') {
-      // Fallback to performRequest for missing methods in client but present in YAML tests
-      const methodMap: Record<string, string> = {
-        GET: 'GET',
-        PUT: 'PUT',
-        POST: 'POST',
-        DELETE: 'DELETE',
-        HEAD: 'HEAD',
-      };
+    // Fallback to performRequest for missing methods in client but present in YAML tests
+    const methodMap: Record<string, { method: string; path: string }> = {
+      'indices.remove_block': { method: 'DELETE', path: '/{index}/_block/{block}' },
+      'indices.get_data_stream_mappings': { method: 'GET', path: '/_data_stream/{name}/_mapping' },
+      'indices.getDataStreamMappings': { method: 'GET', path: '/_data_stream/{name}/_mapping' },
+      'indices.put_data_stream_mappings': { method: 'PUT', path: '/_data_stream/{name}/_mappings' },
+      'indices.putDataStreamMappings': { method: 'PUT', path: '/_data_stream/{name}/_mappings' },
+      'esql.list_queries': { method: 'GET', path: '/_query/esql' },
+      'esql.listQueries': { method: 'GET', path: '/_query/esql' },
+      'esql.put_view': { method: 'PUT', path: '/_query/esql/view/{name}' },
+      'esql.putView': { method: 'PUT', path: '/_query/esql/view/{name}' },
+      'esql.get_view': { method: 'GET', path: '/_query/esql/view/{name}' },
+      'esql.getView': { method: 'GET', path: '/_query/esql/view/{name}' },
+      'esql.get_query': { method: 'GET', path: '/_query/esql/{id}' },
+      'esql.getQuery': { method: 'GET', path: '/_query/esql/{id}' },
+      'security.get_stats': { method: 'GET', path: '/_security/stats' },
+      'security.getStats': { method: 'GET', path: '/_security/stats' },
+      'security.get_service_accounts': { method: 'GET', path: '/_security/service' },
+      'security.get_service_credentials': { method: 'GET', path: '/_security/service/{namespace}/{service}/credential' },
+      'security.create_service_token': { method: 'POST', path: '/_security/service/{namespace}/{service}/credential/token/{name}' },
+      'security.delete_service_token': { method: 'DELETE', path: '/_security/service/{namespace}/{service}/credential/token/{name}' },
+      'security.clear_cached_service_tokens': { method: 'POST', path: '/_security/service/{namespace}/{service}/credential/token/{name}/_clear_cache' },
+      'security.query_user': { method: 'POST', path: '/_security/_query/user' },
+      'security.query_role': { method: 'POST', path: '/_security/_query/role' },
+      'security.query_api_key': { method: 'POST', path: '/_security/_query/api_key' },
+      'security.get_settings': { method: 'GET', path: '/_security/settings' },
+      'security.update_settings': { method: 'PUT', path: '/_security/settings' },
+      'security.get_user_profile': { method: 'GET', path: '/_security/profile/{uid}' },
+      'security.getUserProfile': { method: 'GET', path: '/_security/profile/{uid}' },
+      'security.activate_user_profile': { method: 'POST', path: '/_security/profile/_activate' },
+      'security.has_privileges_user_profile': { method: 'POST', path: '/_security/profile/_has_privileges' },
+      'security.suggest_user_profiles': { method: 'POST', path: '/_security/profile/_suggest' },
+      'security.disable_user': { method: 'PUT', path: '/_security/user/{username}/_disable' },
+      'security.enable_user': { method: 'PUT', path: '/_security/user/{username}/_enable' },
+      'security.invalidate_token': { method: 'POST', path: '/_security/oauth2/token/invalidate' },
+      'security.enable_user_profile': { method: 'POST', path: '/_security/profile/{uid}/_enable' },
+      'security.disable_user_profile': { method: 'POST', path: '/_security/profile/{uid}/_disable' },
+      'security.clear_api_key_cache': { method: 'POST', path: '/_security/api_key/{ids}/_clear_cache' },
+      'security.create_cross_cluster_api_key': { method: 'POST', path: '/_security/cross_cluster/api_key' },
+      'security.update_cross_cluster_api_key': { method: 'PUT', path: '/_security/cross_cluster/api_key/{id}' },
+      'security.bulk_put_role': { method: 'POST', path: '/_security/role' },
+      'security.bulk_delete_role': { method: 'DELETE', path: '/_security/role' },
+      'security.clear_cached_roles': { method: 'POST', path: '/_security/role/{name}/_clear_cache' },
+      'security.put_privileges': { method: 'PUT', path: '/_security/privilege' },
+      'security.get_privileges': { method: 'GET', path: '/_security/privilege' },
+      'security.get_builtin_privileges': { method: 'GET', path: '/_security/user_privileges/builtin' },
+      'security.get_user': { method: 'GET', path: '/_security/user/{username}' },
+      'security.put_user': { method: 'PUT', path: '/_security/user/{username}' },
+      'security.put_role': { method: 'PUT', path: '/_security/role/{name}' },
+      'security.put_role_mapping': { method: 'PUT', path: '/_security/role_mapping/{name}' },
+      'security.delete_role': { method: 'DELETE', path: '/_security/role/{name}' },
+      'security.delete_user': { method: 'DELETE', path: '/_security/user/{username}' },
+      'security.change_password': { method: 'POST', path: '/_security/user/{username}/_password' },
+    };
 
-      // Attempt to infer method and path from actionKey if possible,
-      // but for now, let's just throw or try to use a generic way.
-      // Actually, ES JS client 8.x might have these under different names or moved.
-      // For cat.circuit_breaker, it should be GET /_cat/circuit_breaker
+    if (methodMap[actionKey] || methodMap[method] || (parts[0] === 'indices' && methodMap[`indices.${method}`])) {
+      const mapping = methodMap[actionKey] || methodMap[method] || methodMap[`indices.${method}`];
+      let path = mapping.path;
+      for (const [key, value] of Object.entries(params || {})) {
+        if (path.includes(`{${key}}`)) {
+          path = path.replace(`{${key}}`, String(value));
+          delete (params as any)[key];
+        }
+      }
+      try {
+        const requestParams: any = {
+          method: mapping.method,
+          path: path,
+          headers: headers,
+        };
+        if (params && params.body) {
+          requestParams.body = params.body;
+          delete params.body;
+        }
+        if (params && Object.keys(params).length > 0) {
+          requestParams.querystring = params;
+        }
+        const res = await (client as any).transport.request(requestParams);
+        const resData = res.body !== undefined ? res.body : res;
+        if (actionKey === 'cluster.info' || actionKey.includes('cluster') || actionKey.includes('security') || actionKey.includes('license') || actionKey.includes('esql')) {
+          console.log(`   DEBUG ${actionKey} response:`, JSON.stringify(resData));
+        }
+        return resData;
+      } catch (e: any) {
+        const errorBody = e.meta?.body || e.body || e;
+        const statusCode = e.meta?.statusCode || e.statusCode;
+        console.log(`   DEBUG ${actionKey} error body:`, JSON.stringify(errorBody));
+        if (ignoreCodes.includes(statusCode)) return errorBody;
+        if (step.do.catch) return handleCatch(step.do.catch, errorBody, statusCode);
+        throw e;
+      }
+    }
+
+    if (typeof target[method] !== 'function') {
       if (actionKey.startsWith('cat.')) {
         const rawCatMethod = actionKey.substring(4);
         const pathsToTry = [`/_cat/${rawCatMethod}`, `/_cat/${rawCatMethod.replace(/_/g, '/')}`];
@@ -125,6 +223,7 @@ async function runStep(step: any) {
               method: 'GET',
               path: p,
               querystring: params,
+              headers: headers,
             });
             return res.body !== undefined ? res.body : res;
           } catch (e: any) {
@@ -139,18 +238,25 @@ async function runStep(step: any) {
     }
 
     try {
-      const response = await target[method].bind(target)(params);
+      const response = await target[method].bind(target)(params, { headers: headers });
       const resData = response.body !== undefined ? response.body : response;
-      if (actionKey === 'cluster.info') {
-        console.log('   DEBUG cluster.info response:', JSON.stringify(resData));
+      if (actionKey === 'cluster.info' || actionKey.includes('security') || actionKey.includes('license') || actionKey.includes('esql')) {
+        console.log(`   DEBUG ${actionKey} response:`, JSON.stringify(resData));
+      }
+      if (step.do.catch && !ignoreCodes.includes(response.statusCode)) {
+         throw new Error(`Expected error [${step.do.catch}] but got success`);
       }
       return resData;
     } catch (e: any) {
-      if (ignoreCodes.includes(e.meta?.statusCode)) {
-        return e.meta?.body || e.meta;
+      const errorBody = e.meta?.body || e.body || e;
+      const statusCode = e.meta?.statusCode || e.statusCode;
+
+      if (ignoreCodes.includes(statusCode)) {
+        return errorBody;
       }
+
       if (step.do.catch) {
-        return e.meta?.body || e;
+        return handleCatch(step.do.catch, errorBody, statusCode);
       }
       throw e;
     }
@@ -158,16 +264,56 @@ async function runStep(step: any) {
   return null;
 }
 
+function handleCatch(catchVal: any, errorBody: any, statusCode: number) {
+  if (catchVal.startsWith('/') && catchVal.endsWith('/')) {
+    const regex = new RegExp(catchVal.substring(1, catchVal.length - 1));
+    const errorStr = JSON.stringify(errorBody);
+    if (regex.test(errorStr)) {
+      return errorBody;
+    }
+    throw new Error(`Error [${errorStr}] did not match catch regex [${catchVal}]`);
+  } else if (catchVal === 'unauthorized' && statusCode === 401) {
+    return errorBody;
+  } else if (catchVal === 'forbidden' && statusCode === 403) {
+    return errorBody;
+  } else if (catchVal === 'missing' && statusCode === 404) {
+    return errorBody;
+  } else if (catchVal === 'request_timeout' && statusCode === 408) {
+    return errorBody;
+  } else if (catchVal === 'conflict' && statusCode === 409) {
+    return errorBody;
+  } else if (errorBody?.error?.type === catchVal || errorBody?.type === catchVal) {
+    return errorBody;
+  }
+  // If it's a string catch but not a special one, try to match it in the error message
+  if (typeof catchVal === 'string' && JSON.stringify(errorBody).includes(catchVal)) {
+    return errorBody;
+  }
+  throw new Error(`Error did not match catch [${catchVal}]: ${JSON.stringify(errorBody)}`);
+}
+
 function getValueByPath(obj: any, path: string): any {
   if (!obj) return undefined;
   if (path === '$body' || path === '') return obj.body || obj;
 
-  const data = obj.body || obj;
+  let data = obj.body || obj;
+
+  if (path.startsWith('$')) {
+    const parts = path.split('.');
+    const varName = parts[0].substring(1);
+    if (variables[varName] !== undefined) {
+      data = variables[varName];
+      if (parts.length === 1) return data;
+      path = parts.slice(1).join('.');
+    } else {
+       console.log(`   DEBUG variable not found: ${varName}`);
+    }
+  }
 
   // Try exact path in body first (handles keys with dots)
   if (data && data[path] !== undefined) return data[path];
   // Try exact path at root
-  if (obj[path] !== undefined) return obj[path];
+  if (obj && obj[path] !== undefined) return obj[path];
 
   // Nested path traversal
   const parts = path.split('.');
@@ -309,6 +455,7 @@ async function runFile(filePath: string) {
         } else if (step.set) {
           for (let [path, key] of Object.entries(step.set)) {
             let val = getValueByPath(lastResponse, path as string);
+            console.log(`   DEBUG setting variable [${key}] from path [${path}] to:`, JSON.stringify(val));
             variables[key] = val;
           }
         } else if (step.match) {
@@ -340,9 +487,10 @@ async function runFile(filePath: string) {
           const key = Object.keys(step.length)[0];
           const val = getValueByPath(lastResponse, key);
           const expected = step.length[key];
-          if (val?.length !== expected)
+          const actualLength = Array.isArray(val) ? val.length : (typeof val === 'object' && val !== null ? Object.keys(val).length : val?.length);
+          if (actualLength !== expected)
             throw new Error(
-              `Expected length of [${key}] to be [${expected}], got [${val?.length}]`,
+              `Expected length of [${key}] to be [${expected}], got [${actualLength}]`,
             );
         }
       }

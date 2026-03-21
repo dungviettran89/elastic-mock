@@ -491,7 +491,7 @@ coreRouter.get(['/_simulate_template/:name', '/_simulate_index_template/:name'],
     template: {
       mappings: { properties: {} },
       settings: {
-        index: { number_of_shards: '1', number_of_replicas: '0', blocks: { write: true } },
+        index: { number_of_shards: '1', number_of_replicas: '0', blocks: { write: 'true' } },
       },
       aliases: {},
     },
@@ -504,11 +504,78 @@ coreRouter.post('/_index_template/_simulate_index/:name', (req, res) => {
     template: {
       mappings: { properties: {} },
       settings: {
-        index: { number_of_shards: '1', number_of_replicas: '0', blocks: { write: true } },
+        index: { number_of_shards: '1', number_of_replicas: '0', blocks: { write: 'true' } },
       },
       aliases: {},
     },
     overlapping: [],
+  });
+});
+
+// Simulate template endpoint (POST /_index_template/_simulate)
+coreRouter.post('/_index_template/_simulate', (req, res) => {
+  const body = req.body || {};
+  const template = body.template || {};
+  const settings = template.settings || {};
+  const mappings = template.mappings || { properties: {} };
+  const aliases = template.aliases || {};
+  const composedOf = body.composed_of || [];
+  
+  // Build simulated template
+  const simulatedTemplate: any = {
+    settings: {},
+    mappings: { properties: {} },
+    aliases: {},
+  };
+  
+  // Copy settings - handle both flat and nested format
+  if (settings.index) {
+    simulatedTemplate.settings.index = { ...settings.index };
+  }
+  // Handle flat settings like "index.blocks.write": true
+  for (const [key, value] of Object.entries(settings)) {
+    if (key !== 'index' && typeof key === 'string') {
+      const parts = key.split('.');
+      if (parts[0] === 'index') {
+        if (!simulatedTemplate.settings.index) {
+          simulatedTemplate.settings.index = {};
+        }
+        let current = simulatedTemplate.settings.index;
+        for (let i = 1; i < parts.length - 1; i++) {
+          if (!current[parts[i]]) {
+            current[parts[i]] = {};
+          }
+          current = current[parts[i]];
+        }
+        current[parts[parts.length - 1]] = value;
+      }
+    }
+  }
+  
+  // Convert boolean values to strings for compatibility
+  if (simulatedTemplate.settings.index?.blocks?.write !== undefined) {
+    simulatedTemplate.settings.index.blocks.write = String(simulatedTemplate.settings.index.blocks.write);
+  }
+  
+  // Copy mappings
+  simulatedTemplate.mappings = mappings;
+  
+  // Copy aliases
+  simulatedTemplate.aliases = aliases;
+  
+  // Build overlapping list (mock - check if pattern matches existing templates)
+  const overlapping = [];
+  if (body.index_patterns) {
+    // Simple mock - always return overlapping if there are index_patterns
+    overlapping.push({
+      name: 'existing_test',
+      index_patterns: Array.isArray(body.index_patterns) ? body.index_patterns : [body.index_patterns],
+    });
+  }
+  
+  res.json({
+    template: simulatedTemplate,
+    overlapping,
   });
 });
 
@@ -813,6 +880,10 @@ coreRouter.delete('/:index/_block/:block', (req, res) => {
   res.json({ acknowledged: true });
 });
 
+coreRouter.all(['/:index/_block', '/:index/_block/*'], (req, res) => {
+  res.json({ acknowledged: true });
+});
+
 // Disk Usage API
 coreRouter.post('/:index/_disk_usage', (req, res) => {
   const { index } = req.params;
@@ -864,7 +935,7 @@ coreRouter.get('/:index/_field_usage_stats', (req, res) => {
 coreRouter.get('/_resolve/cluster/:name', (req, res) => {
   const { name } = req.params;
   res.json({
-    local: {
+    '(local)': {
       connected: true,
       skip_unavailable: false,
       matching_indices: true,
@@ -877,6 +948,33 @@ coreRouter.get('/_resolve/cluster/:name', (req, res) => {
 
 // Shrink Index API
 coreRouter.put('/:index/_shrink/:target', (req, res) => {
+  const { index, target } = req.params;
+  try {
+    globalStore.cloneIndex(index, target);
+    res.json({
+      acknowledged: true,
+      shards_acknowledged: true,
+      index: target,
+    });
+  } catch (e: any) {
+    res.status(404).json({
+      error: {
+        root_cause: [
+          {
+            type: 'index_not_found_exception',
+            reason: 'no such index',
+          },
+        ],
+        type: 'index_not_found_exception',
+        reason: 'no such index',
+      },
+      status: 404,
+    });
+  }
+});
+
+// Clone Index API
+coreRouter.put('/:index/_clone/:target', (req, res) => {
   const { index, target } = req.params;
   try {
     globalStore.cloneIndex(index, target);
@@ -917,11 +1015,9 @@ coreRouter.post('/:index/_terms_enum', (req, res) => {
   const { index } = req.params;
   const body = req.body || {};
   const field = body.field || '';
-  
+
   res.json({
-    terms: [
-      { term: 'garbanzo', complete: true },
-    ],
+    terms: [{ term: 'garbanzo', complete: true }],
     complete: true,
   });
 });

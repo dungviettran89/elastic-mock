@@ -4,7 +4,7 @@ import { globalStore } from './store.js';
 export function createClusterRouter() {
   const router = Router();
 
-  router.get('/health', (req, res) => {
+  router.get('/_cluster/health', (req, res) => {
     res.json({
       cluster_name: 'elastic-mock',
       status: 'green',
@@ -24,7 +24,7 @@ export function createClusterRouter() {
     });
   });
 
-  router.get('/info', (req, res) => {
+  router.get('/_cluster/info', (req, res) => {
     res.json({
       cluster_name: 'elastic-mock',
       cluster_uuid: 'mock-uuid',
@@ -33,7 +33,7 @@ export function createClusterRouter() {
     });
   });
 
-  router.get('/state/:metric?', (req, res) => {
+  router.get('/_cluster/state/:metric?', (req, res) => {
     const { metric } = req.params;
 
     const state: any = {
@@ -61,18 +61,18 @@ export function createClusterRouter() {
   });
 
   // Mock Settings
-  router.put('/settings', (req, res) => {
+  router.put('/_cluster/settings', (req, res) => {
     res.json({ acknowledged: true });
   });
 
-  router.get('/settings', (req, res) => {
+  router.get('/_cluster/settings', (req, res) => {
     res.json({
       persistent: {},
       transient: {},
     });
   });
 
-  router.post('/allocation/explain', (req, res) => {
+  router.post('/_cluster/allocation/explain', (req, res) => {
     const { index, shard } = { ...req.query, ...req.body } as any;
     res.json({
       index: index || 'allocation_explain',
@@ -83,7 +83,7 @@ export function createClusterRouter() {
     });
   });
 
-  router.get('/allocation/explain', (req, res) => {
+  router.get('/_cluster/allocation/explain', (req, res) => {
     const { index, shard } = { ...req.query, ...req.body } as any;
     res.json({
       index: index || 'allocation_explain',
@@ -94,15 +94,15 @@ export function createClusterRouter() {
     });
   });
 
-  router.get('/pending_tasks', (req, res) => {
+  router.get('/_cluster/pending_tasks', (req, res) => {
     res.json({ tasks: [] });
   });
 
-  router.post('/reroute', (req, res) => {
+  router.post('/_cluster/reroute', (req, res) => {
     res.json({ acknowledged: true });
   });
 
-  router.get('/stats', (req, res) => {
+  router.get('/_cluster/stats', (req, res) => {
     res.json({
       _nodes: { total: 1, successful: 1, failed: 0 },
       cluster_name: 'elastic-mock',
@@ -111,11 +111,11 @@ export function createClusterRouter() {
     });
   });
 
-  router.post('/voting_config_exclusions', (req, res) => {
+  router.post('/_cluster/voting_config_exclusions', (req, res) => {
     res.json({ acknowledged: true });
   });
 
-  router.delete('/voting_config_exclusions', (req, res) => {
+  router.delete('/_cluster/voting_config_exclusions', (req, res) => {
     res.json({ acknowledged: true });
   });
 

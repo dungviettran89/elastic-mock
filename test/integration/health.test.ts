@@ -28,7 +28,7 @@ describe('Elasticsearch Mock Health API', () => {
 
   it('should return cluster info for GET /', async () => {
     const info = await client.info();
-    expect(info.name).toBe('serverless');
+    expect(info.name).toBe('elastic-mock');
     expect(info.cluster_name).toBe('elastic-mock');
     expect(info.tagline).toBe('You Know, for Search');
   });

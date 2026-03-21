@@ -1,0 +1,88 @@
+import { Router } from 'express';
+
+export function createMiscCoreRouter() {
+  const router = Router();
+
+  // Reindex rethrottle
+  router.post(['/_reindex/:id/_rethrottle', '/_delete_by_query/:id/_rethrottle'], (req, res) => {
+    res.json({
+      nodes: {
+        'node-1': {
+          name: 'node-1',
+          tasks: {
+            'task-1': {
+              status: 'running',
+              description: 'reindex',
+            },
+          },
+        },
+      },
+    });
+  });
+
+  // Explain API
+  router.post('/:index/_explain/:id', (req, res) => {
+    const { index, id } = req.params;
+    const body = req.body || {};
+    const query = body.query || {};
+
+    res.json({
+      _index: index,
+      _id: id,
+      matched: true,
+      explanation: {
+        value: 1.0,
+        description: 'weight',
+        details: [{ value: 1.0, description: 'Query', details: [] }],
+      },
+    });
+  });
+
+  // Field Caps API
+  router.post(['/_field_caps', '/:index/_field_caps'], (req, res) => {
+    const { index } = req.params;
+    const body = req.body || {};
+    let fields = body.fields || [];
+
+    if (typeof fields === 'string') {
+      fields = [fields];
+    }
+
+    const result: any = { indices: index ? [index] : [], fields: {} };
+
+    for (const field of fields) {
+      result.fields[field] = {
+        text: {
+          type: 'text',
+          searchable: true,
+          aggregatable: false,
+          indices: index ? [index] : ['mock-index'],
+          metadata_field: false,
+        },
+      };
+    }
+
+    if (fields.length === 0) {
+      result.fields = {
+        text: {
+          text: {
+            type: 'text',
+            searchable: true,
+            aggregatable: false,
+            indices: index ? [index] : ['mock-index'],
+            metadata_field: false,
+          },
+        },
+      };
+    }
+
+    res.json(result);
+  });
+
+  // Vector Tiles
+  router.get(['/:index/_mvt/:field/:z/:x/:y', '/_mvt/:field/:z/:x/:y'], (req, res) => {
+    res.status(200).send(Buffer.alloc(0));
+  });
+
+  return router;
+}

@@ -21,6 +21,20 @@ export class Store {
   private synonymsSets: Map<string, any> = new Map();
   private synonymRules: Map<string, Map<string, any>> = new Map();
   private roleMappings: Map<string, any> = new Map();
+  private disabledUsers: Set<string> = new Set();
+
+  // User Management
+  disableUser(username: string) {
+    this.disabledUsers.add(username);
+  }
+
+  enableUser(username: string) {
+    this.disabledUsers.delete(username);
+  }
+
+  isUserDisabled(username: string): boolean {
+    return this.disabledUsers.has(username);
+  }
 
   // Template Management
   // ...
