@@ -30,8 +30,8 @@ export function createSearchApplicationRouter() {
   });
 
   router.get('/_application/analytics/:name', (req, res) => {
-    res.json({ 
-      name: req.params.name, 
+    res.json({
+      name: req.params.name,
       created_at_millis: Date.now(),
       behavioral_analytics: true,
     });

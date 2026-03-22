@@ -8,13 +8,42 @@ let securitySettings: any = {
   'security-profile': { enabled: true },
 };
 
-const createdPrivileges = new Set<string>();
+const privileges = new Map<string, any>();
 const disabledProfiles = new Set<string>();
 
 export function createSecurityRouter() {
   const router = Router();
 
   router.get('/_security/_authenticate', (req, res) => {
+    const auth = req.get('authorization');
+    if (auth && auth.startsWith('Basic ')) {
+      const credentials = Buffer.from(auth.split(' ')[1], 'base64').toString().split(':');
+      const username = credentials[0];
+      if (globalStore.isUserDisabled(username)) {
+        return res.status(401).json({
+          error: {
+            root_cause: [
+              { type: 'unauthorized', reason: `unable to authenticate user [${username}]` },
+            ],
+            type: 'unauthorized',
+            reason: `unable to authenticate user [${username}]`,
+          },
+          status: 401,
+        });
+      }
+      const user = globalStore.getUser(username);
+      return res.json({
+        username: username,
+        roles: user?.roles || ['superuser'],
+        full_name: user?.full_name || 'Elastic User',
+        email: user?.email || 'elastic@example.com',
+        metadata: user?.metadata || {},
+        enabled: true,
+        authentication_realm: { name: 'reserved', type: 'reserved' },
+        lookup_realm: { name: 'reserved', type: 'reserved' },
+        authentication_type: 'realm',
+      });
+    }
     res.json({
       username: 'elastic',
       roles: ['superuser'],
@@ -55,9 +84,9 @@ export function createSecurityRouter() {
 
   router.post('/_security/api_key/_bulk_update', (req, res) => {
     const ids = req.body?.ids || ['mock-api-key-id'];
-    res.json({ 
+    res.json({
       updated: ids,
-      noops: []
+      noops: [],
     });
   });
 
@@ -126,55 +155,121 @@ export function createSecurityRouter() {
     });
   });
 
-  router.put(['/_security/privilege', '/_security/privilege/:name'], (req, res) => {
+  router.post('/_security/user/:username/_has_privileges', (req, res) => {
+    res.json({
+      username: req.params.username,
+      has_all_requested: true,
+      cluster: {},
+      index: [],
+    });
+  });
+
+  router.get('/_security/user_privileges/builtin', (req, res) => {
+    res.json({ cluster: ['all'], index: ['all'] });
+  });
+
+  router.get('/_security/user_privileges', (req, res) => {
+    res.json({
+      username: 'elastic',
+      has_all_requested: true,
+      cluster: ['all'],
+      indices: [{ names: ['*'], privileges: ['all'], allow_restricted_indices: true }],
+    });
+  });
+
+  router.put(['/_security/privilege', '/_security/privilege/:application'], (req, res) => {
     const body = req.body || {};
     const result: any = {};
     for (const [appName, appPrivs] of Object.entries(body)) {
       result[appName] = {};
-      for (const [privName] of Object.entries(appPrivs as any)) {
+      for (const [privName, privData] of Object.entries(appPrivs as any)) {
         const key = `${appName}:${privName}`;
-        result[appName][privName] = { created: !createdPrivileges.has(key) };
-        createdPrivileges.add(key);
+        result[appName][privName] = { created: !privileges.has(key) };
+        privileges.set(key, {
+          application: appName,
+          name: privName,
+          actions: (privData as any).actions || ['action1'],
+          metadata: (privData as any).metadata || {},
+          created: true,
+        });
       }
     }
     res.json(result);
   });
 
   router.get('/_security/privilege', (req, res) => {
-    logger.info(`Security: GET /_security/privilege`);
     const result: any = {};
-    for (const key of createdPrivileges) {
+    for (const [key, value] of privileges.entries()) {
       const [appName, privName] = key.split(':');
       if (!result[appName]) result[appName] = {};
-      result[appName][privName] = { application: appName, name: privName, actions: ['action1'], metadata: {}, created: true };
+      result[appName][privName] = value;
     }
     res.json(result);
   });
 
-  router.get('/_security/privilege/:name', (req, res) => {
-    const appName = req.params.name;
-    logger.info(`Security: GET /_security/privilege/${appName}`);
+  router.get('/_security/privilege/:application', (req, res) => {
+    const appName = req.params.application;
     const result: any = {};
-    for (const key of createdPrivileges) {
+    for (const [key, value] of privileges.entries()) {
       const [a, privName] = key.split(':');
       if (a === appName) {
         if (!result[appName]) result[appName] = {};
-        result[appName][privName] = { application: appName, name: privName, actions: ['action1'], metadata: {}, created: true };
+        result[appName][privName] = value;
       }
     }
-    if (!result[appName] || Object.keys(result[appName]).length === 0) {
-       result[appName] = {
-         p1: { application: appName, name: 'p1', actions: ['action1'], metadata: {}, created: true }
-       };
+    res.json(result);
+  });
+
+  router.get('/_security/privilege/:application/:name', (req, res) => {
+    const appName = req.params.application;
+    const names = req.params.name.split(',');
+    const result: any = {};
+    for (const name of names) {
+      const key = `${appName}:${name}`;
+      const value = privileges.get(key);
+      if (value) {
+        if (!result[appName]) result[appName] = {};
+        result[appName][name] = value;
+      }
+    }
+    if (Object.keys(result).length === 0) {
+      return res.status(404).json({
+        error: {
+          root_cause: [{ type: 'resource_not_found_exception', reason: 'privilege not found' }],
+          type: 'resource_not_found_exception',
+          reason: 'privilege not found',
+        },
+        status: 404,
+      });
     }
     res.json(result);
   });
 
   router.delete('/_security/privilege/:application/:name', (req, res) => {
-    const key = `${req.params.application}:${req.params.name}`;
-    createdPrivileges.delete(key);
-    res.json({ acknowledged: true });
+    const appName = req.params.application;
+    const names = req.params.name.split(',');
+    const result: any = { [appName]: {} };
+    for (const name of names) {
+      const key = `${appName}:${name}`;
+      const exists = privileges.has(key);
+      privileges.delete(key);
+      result[appName][name] = { found: exists };
+    }
+    res.json(result);
   });
+
+  router.post(
+    ['/_security/privilege/_clear_cache', '/_security/privilege/:application/_clear_cache'],
+    (req, res) => {
+      res.json({
+        _nodes: {
+          total: 1,
+          successful: 1,
+          failed: 0,
+        },
+      });
+    },
+  );
 
   router.post('/_security/role/:name', (req, res) => {
     res.json({ acknowledged: true, role: { created: true } });
@@ -182,30 +277,33 @@ export function createSecurityRouter() {
 
   router.post('/_security/role', (req, res) => {
     const rolesMap = req.body?.roles || req.body || {};
-    res.json({ 
+    res.json({
       created: Object.keys(rolesMap),
       updated: [],
-      noops: []
+      noops: [],
     });
   });
 
   router.delete('/_security/role', (req, res) => {
     const names = req.body?.names || [];
-    res.json({ 
+    res.json({
       deleted: names,
-      not_found: []
+      not_found: [],
     });
   });
 
-  router.post('/_security/role/:name/_clear_cache', (req, res) => {
-    res.json({
-      _nodes: {
-        total: 1,
-        successful: 1,
-        failed: 0
-      }
-    });
-  });
+  router.post(
+    ['/_security/role/:name/_clear_cache', '/_security/role/_clear_cache'],
+    (req, res) => {
+      res.json({
+        _nodes: {
+          total: 1,
+          successful: 1,
+          failed: 0,
+        },
+      });
+    },
+  );
 
   router.put('/_security/role/:name', (req, res) => {
     res.json({ acknowledged: true, role: { created: true } });
@@ -280,31 +378,34 @@ export function createSecurityRouter() {
     });
   });
 
-  router.all([
-    '/_security/oauth2/token/invalidate', 
-    '/_security/oauth2/token/_invalidate',
-    '/_security/oauth2/token',
-    '/_security/token/invalidate',
-    '/_security/token/_invalidate'
-  ], (req, res) => {
-    if (req.method === 'POST' || req.method === 'DELETE') {
-      res.json({
-        invalidated_tokens: 1,
-        previously_invalidated_tokens: 0,
-        error_count: 0,
-      });
-    } else {
-      res.status(405).send('Method Not Allowed');
-    }
-  });
+  router.all(
+    [
+      '/_security/oauth2/token/invalidate',
+      '/_security/oauth2/token/_invalidate',
+      '/_security/oauth2/token',
+      '/_security/token/invalidate',
+      '/_security/token/_invalidate',
+    ],
+    (req, res) => {
+      if (req.method === 'POST' || req.method === 'DELETE') {
+        res.json({
+          invalidated_tokens: 1,
+          previously_invalidated_tokens: 0,
+          error_count: 0,
+        });
+      } else {
+        res.status(405).send('Method Not Allowed');
+      }
+    },
+  );
 
   router.post('/_security/api_key/:ids/_clear_cache', (req, res) => {
     res.json({
       _nodes: {
         total: 1,
         successful: 1,
-        failed: 0
-      }
+        failed: 0,
+      },
     });
   });
 
@@ -351,15 +452,15 @@ export function createSecurityRouter() {
           },
           last_seen: Date.now(),
           data: {},
-        }
-      ]
+        },
+      ],
     });
   });
 
   router.post('/_security/profile/_has_privileges', (req, res) => {
     res.json({
       has_privilege_uids: [req.body?.uids?.[0] || 'mock-profile-uid'],
-      errors: {}
+      errors: {},
     });
   });
 
@@ -371,32 +472,40 @@ export function createSecurityRouter() {
         {
           uid: 'mock-profile-uid',
           enabled: true,
-          user: { username: 'juan', roles: ['superuser'], full_name: 'Juan Pérez', email: 'juan@bazooka.gum' },
+          user: {
+            username: 'juan',
+            roles: ['superuser'],
+            full_name: 'Juan Pérez',
+            email: 'juan@bazooka.gum',
+          },
           last_seen: Date.now(),
-          data: {}
-        }
-      ]
+          data: {},
+        },
+      ],
     });
   });
 
-  router.all(['/_security/profile/:uid/_disable', '/_security/profile/:uid/_enable'], (req, res) => {
-    const uid = req.params.uid;
-    if (req.path.includes('_disable')) {
-      disabledProfiles.add(uid);
-    } else {
-      disabledProfiles.delete(uid);
-    }
-    res.json({ acknowledged: true });
-  });
+  router.all(
+    ['/_security/profile/:uid/_disable', '/_security/profile/:uid/_enable'],
+    (req, res) => {
+      const uid = req.params.uid;
+      if (req.path.includes('_disable')) {
+        disabledProfiles.add(uid);
+      } else {
+        disabledProfiles.delete(uid);
+      }
+      res.json({ acknowledged: true });
+    },
+  );
 
   router.get('/_security/service/:namespace?/:service?', (req, res) => {
     const namespace = req.params.namespace;
     const service = req.params.service;
-    
+
     if (namespace && service) {
       return res.json({ [`${namespace}/${service}`]: { enabled: true, metadata: {} } });
     }
-    
+
     res.json({
       'elastic/auto-ops': { enabled: true, metadata: {} },
       'elastic/fleet-server': { enabled: true, metadata: {} },
@@ -409,7 +518,7 @@ export function createSecurityRouter() {
     res.json({
       service_account: `${req.params.namespace}/${req.params.service}`,
       tokens: [],
-      nodes_credentials: {}
+      nodes_credentials: {},
     });
   });
 
@@ -419,8 +528,8 @@ export function createSecurityRouter() {
       created: true,
       token: {
         name: req.params.name,
-        value: 'mock-service-token-value'
-      }
+        value: 'mock-service-token-value',
+      },
     });
   });
 
@@ -428,15 +537,18 @@ export function createSecurityRouter() {
     res.json({ acknowledged: true });
   });
 
-  router.post('/_security/service/:namespace/:service/credential/token/:name/_clear_cache', (req, res) => {
-    res.json({
-      _nodes: {
-        total: 1,
-        successful: 1,
-        failed: 0
-      }
-    });
-  });
+  router.post(
+    '/_security/service/:namespace/:service/credential/token/:name/_clear_cache',
+    (req, res) => {
+      res.json({
+        _nodes: {
+          total: 1,
+          successful: 1,
+          failed: 0,
+        },
+      });
+    },
+  );
 
   router.post('/_security/_query/service', (req, res) => {
     res.json({
@@ -486,31 +598,35 @@ export function createSecurityRouter() {
     });
   });
 
-  router.get('/_security/user_privileges/builtin', (req, res) => {
-    res.json({ cluster: ['all'], index: ['all'] });
+  router.get(['/_security/user_privileges', '/_security/user/_privileges'], (req, res) => {
+    res.json({
+      username: 'elastic',
+      has_all_requested: true,
+      cluster: ['all'],
+      indices: [{ names: ['*'], privileges: ['all'], allow_restricted_indices: true }],
+    });
   });
 
   router.post('/_security/user/:username', (req, res) => {
+    globalStore.putUser(req.params.username, req.body);
     res.json({ acknowledged: true });
   });
 
   router.put('/_security/user/:username', (req, res) => {
+    globalStore.putUser(req.params.username, req.body);
     res.json({ acknowledged: true });
   });
 
   router.get('/_security/user/:username?', (req, res) => {
     const username = req.params.username;
+    logger.info(`Security: GET /_security/user username=${username}`);
     if (username) {
-      return res.json({
-        [username]: {
-          username: username,
-          roles: ['superuser'],
-          full_name: 'Mock User',
-          email: 'mock@example.com',
-          metadata: {},
-          enabled: true,
-        },
-      });
+      const user = globalStore.getUser(username);
+      if (user) {
+        return res.json({ [username]: user });
+      }
+      logger.warn(`Security: User not found: ${username}`);
+      return res.status(404).json({ error: 'user not found' });
     }
     res.json({
       elastic: {
@@ -520,7 +636,7 @@ export function createSecurityRouter() {
         email: 'elastic@example.com',
         metadata: {},
         enabled: true,
-      }
+      },
     });
   });
 
@@ -542,19 +658,28 @@ export function createSecurityRouter() {
   });
 
   router.put('/_security/user/:username/_password', (req, res) => {
+    globalStore.changePassword(req.params.username, req.body.password);
     res.json({});
   });
 
   router.put('/_security/user/:username/_disable', (req, res) => {
+    globalStore.disableUser(req.params.username);
     res.json({ acknowledged: true });
   });
 
   router.put('/_security/user/:username/_enable', (req, res) => {
+    globalStore.enableUser(req.params.username);
     res.json({ acknowledged: true });
   });
 
   router.post('/_security/user/:username/_password', (req, res) => {
+    globalStore.changePassword(req.params.username, req.body.password);
     res.json({});
+  });
+
+  router.delete('/_security/user/:username', (req, res) => {
+    globalStore.deleteUser(req.params.username);
+    res.json({ acknowledged: true });
   });
 
   // Keep these at the end

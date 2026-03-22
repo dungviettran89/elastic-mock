@@ -33,42 +33,115 @@ export function createServer() {
   // Also handle cases where application/json is used but it's actually NDJSON (common in some tests)
   app.use((req, res, next) => {
     const contentType = req.get('content-type') || '';
-    if (contentType.includes('ndjson') || req.path.includes('_bulk') || req.path.includes('_msearch') || req.path.includes('_find_structure')) {
-       express.text({ type: '*/*', limit: '50mb' })(req, res, (err) => {
-         if (err) return next(err);
-         if (typeof req.body === 'string' && req.body.trim().startsWith('{')) {
-           try {
-             // If it looks like a single JSON, try to parse it
-             if (!req.body.includes('\n') || req.body.trim().split('\n').length === 1) {
-               req.body = JSON.parse(req.body);
-             }
-           } catch (e) {}
-         }
-         next();
-       });
+    if (
+      contentType.includes('ndjson') ||
+      req.path.includes('_bulk') ||
+      req.path.includes('_msearch') ||
+      req.path.includes('find_structure') ||
+      req.path.includes('find_message_structure') ||
+      req.path.includes('find_field_structure')
+    ) {
+      express.text({ type: '*/*', limit: '50mb' })(req, res, (err) => {
+        if (err) return next(err);
+        if (typeof req.body === 'string' && req.body.trim().startsWith('{')) {
+          try {
+            // If it looks like a single JSON, try to parse it
+            if (!req.body.includes('\n') || req.body.trim().split('\n').length === 1) {
+              req.body = JSON.parse(req.body);
+            }
+          } catch (e) {}
+        }
+        next();
+      });
     } else {
       express.json({
         type: ['application/json', 'application/vnd.elasticsearch+json'],
-      })(req, res, next);
+      })(req, res, (err?: any) => {
+        if (err instanceof SyntaxError) {
+          logger.info(
+            `Body Parser: SyntaxError in JSON body for ${req.path}, falling back to text parsing`,
+          );
+          // If JSON parsing fails, fallback to text parsing
+          express.text({ type: '*/*', limit: '50mb' })(req, res, (textErr?: any) => {
+            if (textErr) return next(textErr);
+            next();
+          });
+        } else {
+          next(err);
+        }
+      });
     }
   });
 
-  // Simple auth check for disabled user juan (base64 for juan:s3krit-password)
+  // Simple auth check for disabled users and passwords
   app.use((req, res, next) => {
     const auth = req.get('authorization');
-    if (auth === 'Basic anVhbjpzM2tyaXQtcGFzc3dvcmQ=') {
-      if (globalStore.isUserDisabled('juan')) {
-        logger.info(`Auth: Blocking disabled user juan`);
-        res.status(401);
-        return res.json({
-          error: {
-            root_cause: [{ type: 'unauthorized', reason: 'unable to authenticate user [juan] for REST request [/_cluster/health]', header: { 'WWW-Authenticate': 'Basic realm="security" charset="UTF-8"' } }],
-            type: 'unauthorized',
-            reason: 'unable to authenticate user [juan] for REST request [/_cluster/health]',
-            header: { 'WWW-Authenticate': 'Basic realm="security" charset="UTF-8"' },
-          },
-          status: 401,
-        });
+    if (auth && auth.startsWith('Basic ')) {
+      const credentials = Buffer.from(auth.split(' ')[1], 'base64').toString().split(':');
+      const username = credentials[0];
+      const password = credentials[1];
+
+      const user = globalStore.getUser(username);
+
+      // If user exists in store, check password and enabled status
+      if (user) {
+        if (globalStore.isUserDisabled(username)) {
+          logger.info(`Auth: Blocking disabled user ${username}`);
+          return res.status(401).json({
+            error: {
+              root_cause: [
+                {
+                  type: 'unauthorized',
+                  reason: `unable to authenticate user [${username}] for REST request [${req.path}]`,
+                  header: { 'WWW-Authenticate': 'Basic realm="security" charset="UTF-8"' },
+                },
+              ],
+              type: 'unauthorized',
+              reason: `unable to authenticate user [${username}] for REST request [${req.path}]`,
+              header: { 'WWW-Authenticate': 'Basic realm="security" charset="UTF-8"' },
+            },
+            status: 401,
+          });
+        }
+
+        if (user.password && user.password !== password) {
+          logger.info(`Auth: Password mismatch for user ${username}`);
+          return res.status(401).json({
+            error: {
+              root_cause: [
+                {
+                  type: 'unauthorized',
+                  reason: `unable to authenticate user [${username}] for REST request [${req.path}]`,
+                  header: { 'WWW-Authenticate': 'Basic realm="security" charset="UTF-8"' },
+                },
+              ],
+              type: 'unauthorized',
+              reason: `unable to authenticate user [${username}] for REST request [${req.path}]`,
+              header: { 'WWW-Authenticate': 'Basic realm="security" charset="UTF-8"' },
+            },
+            status: 401,
+          });
+        }
+      } else {
+        // Hardcoded check for 'juan' if not in store (for compatibility with previous mock state if any)
+        if (username === 'juan' && globalStore.isUserDisabled('juan')) {
+          logger.info(`Auth: Blocking hardcoded disabled user juan`);
+          return res.status(401).json({
+            error: {
+              root_cause: [
+                {
+                  type: 'unauthorized',
+                  reason: `unable to authenticate user [juan] for REST request [${req.path}]`,
+                  header: { 'WWW-Authenticate': 'Basic realm="security" charset="UTF-8"' },
+                },
+              ],
+              type: 'unauthorized',
+              reason: `unable to authenticate user [juan] for REST request [${req.path}]`,
+              header: { 'WWW-Authenticate': 'Basic realm="security" charset="UTF-8"' },
+            },
+            status: 401,
+          });
+        }
       }
     }
     next();

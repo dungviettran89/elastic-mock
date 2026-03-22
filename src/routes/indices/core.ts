@@ -520,14 +520,14 @@ coreRouter.post('/_index_template/_simulate', (req, res) => {
   const mappings = template.mappings || { properties: {} };
   const aliases = template.aliases || {};
   const composedOf = body.composed_of || [];
-  
+
   // Build simulated template
   const simulatedTemplate: any = {
     settings: {},
     mappings: { properties: {} },
     aliases: {},
   };
-  
+
   // Copy settings - handle both flat and nested format
   if (settings.index) {
     simulatedTemplate.settings.index = { ...settings.index };
@@ -551,28 +551,32 @@ coreRouter.post('/_index_template/_simulate', (req, res) => {
       }
     }
   }
-  
+
   // Convert boolean values to strings for compatibility
   if (simulatedTemplate.settings.index?.blocks?.write !== undefined) {
-    simulatedTemplate.settings.index.blocks.write = String(simulatedTemplate.settings.index.blocks.write);
+    simulatedTemplate.settings.index.blocks.write = String(
+      simulatedTemplate.settings.index.blocks.write,
+    );
   }
-  
+
   // Copy mappings
   simulatedTemplate.mappings = mappings;
-  
+
   // Copy aliases
   simulatedTemplate.aliases = aliases;
-  
+
   // Build overlapping list (mock - check if pattern matches existing templates)
   const overlapping = [];
   if (body.index_patterns) {
     // Simple mock - always return overlapping if there are index_patterns
     overlapping.push({
       name: 'existing_test',
-      index_patterns: Array.isArray(body.index_patterns) ? body.index_patterns : [body.index_patterns],
+      index_patterns: Array.isArray(body.index_patterns)
+        ? body.index_patterns
+        : [body.index_patterns],
     });
   }
-  
+
   res.json({
     template: simulatedTemplate,
     overlapping,

@@ -22,6 +22,112 @@ export class Store {
   private synonymRules: Map<string, Map<string, any>> = new Map();
   private roleMappings: Map<string, any> = new Map();
   private disabledUsers: Set<string> = new Set();
+  private tasks: Map<string, any> = new Map();
+  private users: Map<string, any> = new Map();
+
+  // User Management
+  putUser(username: string, body: any) {
+    this.users.set(username, {
+      username,
+      password: body.password,
+      roles: body.roles || [],
+      full_name: body.full_name || '',
+      email: body.email || '',
+      metadata: body.metadata || {},
+      enabled: true,
+    });
+  }
+
+  changePassword(username: string, password: string) {
+    const user = this.users.get(username);
+    if (user) {
+      user.password = password;
+    } else {
+      // Create user if not exists for simplicity in mock
+      this.users.set(username, { username, password, roles: [], enabled: true });
+    }
+  }
+
+  getUser(username: string) {
+    return this.users.get(username);
+  }
+
+  deleteUser(username: string) {
+    return this.users.delete(username);
+  }
+
+  // Task Management
+  createTask(action: string, description: string) {
+    const taskId = `mock-task-id:${Math.floor(Math.random() * 1000000)}`;
+    const task = {
+      node: 'mock-node',
+      id: taskId.split(':')[1],
+      type: 'transport',
+      action,
+      status: {
+        total: 0,
+        updated: 0,
+        created: 0,
+        deleted: 0,
+        batches: 1,
+        version_conflicts: 0,
+        noops: 0,
+        retries: { bulk: 0, search: 0 },
+        throttled_millis: 0,
+        requests_per_second: -1,
+        throttled_until_millis: 0,
+      },
+      description,
+      start_time_in_millis: Date.now(),
+      running_time_in_nanos: 0,
+      cancellable: true,
+      cancelled: false,
+    };
+    this.tasks.set(taskId, task);
+    return taskId;
+  }
+
+  getTask(taskId: string) {
+    const task = this.tasks.get(taskId);
+    if (!task) return null;
+    return {
+      completed: true, // Mock tasks are always "completed" for simplicity in this mock
+      task,
+      response: {
+        took: 1,
+        timed_out: false,
+        total: task.status.total,
+        updated: task.status.updated,
+        created: task.status.created,
+        deleted: task.status.deleted,
+        batches: task.status.batches,
+        version_conflicts: task.status.version_conflicts,
+        noops: task.status.noops,
+        retries: task.status.retries,
+        throttled_millis: task.status.throttled_millis,
+        requests_per_second: task.status.requests_per_second,
+        throttled_until_millis: task.status.throttled_until_millis,
+        failures: [],
+      },
+    };
+  }
+
+  listTasks() {
+    const tasks: any = {};
+    for (const [id, task] of this.tasks.entries()) {
+      tasks[id] = task;
+    }
+    return { nodes: { 'mock-node': { name: 'mock-node', tasks } } };
+  }
+
+  cancelTask(taskId: string) {
+    const task = this.tasks.get(taskId);
+    if (task) {
+      task.cancelled = true;
+      return { nodes: { 'mock-node': { name: 'mock-node', tasks: { [taskId]: task } } } };
+    }
+    return { nodes: {} };
+  }
 
   // User Management
   disableUser(username: string) {
@@ -287,13 +393,29 @@ export class Store {
     return { responses };
   }
 
-  updateByQuery(indexName: string, body: any) {
+  updateByQuery(indexName: string, body: any, query: any = {}) {
+    logger.info(`Store: updateByQuery index=${indexName} query=${JSON.stringify(query)}`);
     const index = this.getIndex(indexName);
     if (!index) {
       throw new Error(`Index [${indexName}] not found`);
     }
 
     const count = index.documents.size;
+    const waitForCompletion =
+      query.wait_for_completion !== 'false' && query.wait_for_completion !== false;
+
+    if (!waitForCompletion) {
+      const taskId = this.createTask(
+        'indices:data/write/update/byquery',
+        `update-by-query [${indexName}]`,
+      );
+      const task = this.tasks.get(taskId);
+      task.status.total = count;
+      task.status.updated = count;
+      logger.info(`Store: created task ${taskId}`);
+      return { task: taskId };
+    }
+
     return {
       took: 1,
       timed_out: false,
@@ -366,18 +488,18 @@ export class Store {
     return false;
   }
 
-  deleteByQuery(indexName: string, body: any) {
+  deleteByQuery(indexName: string, body: any, query: any = {}) {
     const index = this.getIndex(indexName);
     if (!index) {
       throw new Error(`Index [${indexName}] not found`);
     }
 
-    const query = body.query || { match_all: {} };
+    const esQuery = body.query || { match_all: {} };
     const deletedIds: string[] = [];
 
     // Find all documents matching the query
     for (const [id, doc] of index.documents.entries()) {
-      if (this.matchesQuery(doc, query)) {
+      if (this.matchesQuery(doc, esQuery)) {
         deletedIds.push(id);
       }
     }
@@ -386,6 +508,18 @@ export class Store {
     for (const id of deletedIds) {
       index.documents.delete(id);
       index.searchIndex.remove(id);
+    }
+
+    const waitForCompletion = query.wait_for_completion !== 'false';
+    if (!waitForCompletion) {
+      const taskId = this.createTask(
+        'indices:data/write/delete/byquery',
+        `delete-by-query [${indexName}]`,
+      );
+      const task = this.tasks.get(taskId);
+      task.status.total = deletedIds.length;
+      task.status.deleted = deletedIds.length;
+      return { task: taskId };
     }
 
     return {

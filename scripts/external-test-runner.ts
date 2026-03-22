@@ -56,7 +56,9 @@ function replaceVariables(obj: any): any {
 
 async function runStep(step: any) {
   if (step.do) {
-    let actionKey = Object.keys(step.do).find(k => k !== 'catch' && k !== 'headers' && k !== 'node_selector' && k !== 'warnings');
+    let actionKey = Object.keys(step.do).find(
+      (k) => k !== 'catch' && k !== 'headers' && k !== 'node_selector' && k !== 'warnings',
+    );
     if (!actionKey) {
       if (step.do.catch) return null; // Just a catch with no action? Should not happen normally.
       actionKey = Object.keys(step.do)[0];
@@ -86,8 +88,12 @@ async function runStep(step: any) {
     }
 
     // Also auto-parse params.body if it's a string JSON
-    if (params && typeof params === 'object' && typeof params.body === 'string' && 
-        (params.body.trim().startsWith('{') || params.body.trim().startsWith('['))) {
+    if (
+      params &&
+      typeof params === 'object' &&
+      typeof params.body === 'string' &&
+      (params.body.trim().startsWith('{') || params.body.trim().startsWith('['))
+    ) {
       try {
         params.body = JSON.parse(params.body);
       } catch (e) {
@@ -137,10 +143,22 @@ async function runStep(step: any) {
       'security.get_stats': { method: 'GET', path: '/_security/stats' },
       'security.getStats': { method: 'GET', path: '/_security/stats' },
       'security.get_service_accounts': { method: 'GET', path: '/_security/service' },
-      'security.get_service_credentials': { method: 'GET', path: '/_security/service/{namespace}/{service}/credential' },
-      'security.create_service_token': { method: 'POST', path: '/_security/service/{namespace}/{service}/credential/token/{name}' },
-      'security.delete_service_token': { method: 'DELETE', path: '/_security/service/{namespace}/{service}/credential/token/{name}' },
-      'security.clear_cached_service_tokens': { method: 'POST', path: '/_security/service/{namespace}/{service}/credential/token/{name}/_clear_cache' },
+      'security.get_service_credentials': {
+        method: 'GET',
+        path: '/_security/service/{namespace}/{service}/credential',
+      },
+      'security.create_service_token': {
+        method: 'POST',
+        path: '/_security/service/{namespace}/{service}/credential/token/{name}',
+      },
+      'security.delete_service_token': {
+        method: 'DELETE',
+        path: '/_security/service/{namespace}/{service}/credential/token/{name}',
+      },
+      'security.clear_cached_service_tokens': {
+        method: 'POST',
+        path: '/_security/service/{namespace}/{service}/credential/token/{name}/_clear_cache',
+      },
       'security.query_user': { method: 'POST', path: '/_security/_query/user' },
       'security.query_role': { method: 'POST', path: '/_security/_query/role' },
       'security.query_api_key': { method: 'POST', path: '/_security/_query/api_key' },
@@ -149,22 +167,43 @@ async function runStep(step: any) {
       'security.get_user_profile': { method: 'GET', path: '/_security/profile/{uid}' },
       'security.getUserProfile': { method: 'GET', path: '/_security/profile/{uid}' },
       'security.activate_user_profile': { method: 'POST', path: '/_security/profile/_activate' },
-      'security.has_privileges_user_profile': { method: 'POST', path: '/_security/profile/_has_privileges' },
+      'security.has_privileges_user_profile': {
+        method: 'POST',
+        path: '/_security/profile/_has_privileges',
+      },
       'security.suggest_user_profiles': { method: 'POST', path: '/_security/profile/_suggest' },
       'security.disable_user': { method: 'PUT', path: '/_security/user/{username}/_disable' },
       'security.enable_user': { method: 'PUT', path: '/_security/user/{username}/_enable' },
       'security.invalidate_token': { method: 'POST', path: '/_security/oauth2/token/invalidate' },
       'security.enable_user_profile': { method: 'POST', path: '/_security/profile/{uid}/_enable' },
-      'security.disable_user_profile': { method: 'POST', path: '/_security/profile/{uid}/_disable' },
-      'security.clear_api_key_cache': { method: 'POST', path: '/_security/api_key/{ids}/_clear_cache' },
-      'security.create_cross_cluster_api_key': { method: 'POST', path: '/_security/cross_cluster/api_key' },
-      'security.update_cross_cluster_api_key': { method: 'PUT', path: '/_security/cross_cluster/api_key/{id}' },
+      'security.disable_user_profile': {
+        method: 'POST',
+        path: '/_security/profile/{uid}/_disable',
+      },
+      'security.clear_api_key_cache': {
+        method: 'POST',
+        path: '/_security/api_key/{ids}/_clear_cache',
+      },
+      'security.create_cross_cluster_api_key': {
+        method: 'POST',
+        path: '/_security/cross_cluster/api_key',
+      },
+      'security.update_cross_cluster_api_key': {
+        method: 'PUT',
+        path: '/_security/cross_cluster/api_key/{id}',
+      },
       'security.bulk_put_role': { method: 'POST', path: '/_security/role' },
       'security.bulk_delete_role': { method: 'DELETE', path: '/_security/role' },
-      'security.clear_cached_roles': { method: 'POST', path: '/_security/role/{name}/_clear_cache' },
+      'security.clear_cached_roles': {
+        method: 'POST',
+        path: '/_security/role/{name}/_clear_cache',
+      },
       'security.put_privileges': { method: 'PUT', path: '/_security/privilege' },
       'security.get_privileges': { method: 'GET', path: '/_security/privilege' },
-      'security.get_builtin_privileges': { method: 'GET', path: '/_security/user_privileges/builtin' },
+      'security.get_builtin_privileges': {
+        method: 'GET',
+        path: '/_security/user_privileges/builtin',
+      },
       'security.get_user': { method: 'GET', path: '/_security/user/{username}' },
       'security.put_user': { method: 'PUT', path: '/_security/user/{username}' },
       'security.put_role': { method: 'PUT', path: '/_security/role/{name}' },
@@ -174,7 +213,11 @@ async function runStep(step: any) {
       'security.change_password': { method: 'POST', path: '/_security/user/{username}/_password' },
     };
 
-    if (methodMap[actionKey] || methodMap[method] || (parts[0] === 'indices' && methodMap[`indices.${method}`])) {
+    if (
+      methodMap[actionKey] ||
+      methodMap[method] ||
+      (parts[0] === 'indices' && methodMap[`indices.${method}`])
+    ) {
       const mapping = methodMap[actionKey] || methodMap[method] || methodMap[`indices.${method}`];
       let path = mapping.path;
       for (const [key, value] of Object.entries(params || {})) {
@@ -198,7 +241,13 @@ async function runStep(step: any) {
         }
         const res = await (client as any).transport.request(requestParams);
         const resData = res.body !== undefined ? res.body : res;
-        if (actionKey === 'cluster.info' || actionKey.includes('cluster') || actionKey.includes('security') || actionKey.includes('license') || actionKey.includes('esql')) {
+        if (
+          actionKey === 'cluster.info' ||
+          actionKey.includes('cluster') ||
+          actionKey.includes('security') ||
+          actionKey.includes('license') ||
+          actionKey.includes('esql')
+        ) {
           console.log(`   DEBUG ${actionKey} response:`, JSON.stringify(resData));
         }
         return resData;
@@ -240,11 +289,16 @@ async function runStep(step: any) {
     try {
       const response = await target[method].bind(target)(params, { headers: headers });
       const resData = response.body !== undefined ? response.body : response;
-      if (actionKey === 'cluster.info' || actionKey.includes('security') || actionKey.includes('license') || actionKey.includes('esql')) {
+      if (
+        actionKey === 'cluster.info' ||
+        actionKey.includes('security') ||
+        actionKey.includes('license') ||
+        actionKey.includes('esql')
+      ) {
         console.log(`   DEBUG ${actionKey} response:`, JSON.stringify(resData));
       }
       if (step.do.catch && !ignoreCodes.includes(response.statusCode)) {
-         throw new Error(`Expected error [${step.do.catch}] but got success`);
+        throw new Error(`Expected error [${step.do.catch}] but got success`);
       }
       return resData;
     } catch (e: any) {
@@ -306,7 +360,7 @@ function getValueByPath(obj: any, path: string): any {
       if (parts.length === 1) return data;
       path = parts.slice(1).join('.');
     } else {
-       console.log(`   DEBUG variable not found: ${varName}`);
+      console.log(`   DEBUG variable not found: ${varName}`);
     }
   }
 
@@ -455,7 +509,10 @@ async function runFile(filePath: string) {
         } else if (step.set) {
           for (let [path, key] of Object.entries(step.set)) {
             let val = getValueByPath(lastResponse, path as string);
-            console.log(`   DEBUG setting variable [${key}] from path [${path}] to:`, JSON.stringify(val));
+            console.log(
+              `   DEBUG setting variable [${key}] from path [${path}] to:`,
+              JSON.stringify(val),
+            );
             variables[key] = val;
           }
         } else if (step.match) {
@@ -487,7 +544,11 @@ async function runFile(filePath: string) {
           const key = Object.keys(step.length)[0];
           const val = getValueByPath(lastResponse, key);
           const expected = step.length[key];
-          const actualLength = Array.isArray(val) ? val.length : (typeof val === 'object' && val !== null ? Object.keys(val).length : val?.length);
+          const actualLength = Array.isArray(val)
+            ? val.length
+            : typeof val === 'object' && val !== null
+              ? Object.keys(val).length
+              : val?.length;
           if (actualLength !== expected)
             throw new Error(
               `Expected length of [${key}] to be [${expected}], got [${actualLength}]`,

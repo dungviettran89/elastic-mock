@@ -46,7 +46,7 @@ export function createQueryRulesRouter() {
   router.post('/_query_rules/:ruleset_id/_test', (req, res) => {
     const body = req.body || {};
     const matchCriteria = body.match_criteria || {};
-    
+
     // Check if ruleset exists (mock: only test-ruleset exists)
     if (req.params.ruleset_id === 'nonexistent-ruleset') {
       if (Object.keys(matchCriteria).length === 0) {
@@ -64,14 +64,11 @@ export function createQueryRulesRouter() {
         },
       });
     }
-    
+
     // Mock response for test-ruleset
     res.json({
       total_matched_rules: 2,
-      matched_rules: [
-        { rule_id: 'rule1' },
-        { rule_id: 'rule5' },
-      ],
+      matched_rules: [{ rule_id: 'rule1' }, { rule_id: 'rule5' }],
     });
   });
 

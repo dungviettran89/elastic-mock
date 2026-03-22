@@ -11,12 +11,9 @@ export function createTransformRouter() {
     res.json({ id: req.params.id, acknowledged: true });
   });
 
-  router.post(
-    ['/_transform/:id/_start', '/_transform/:id/_stop'],
-    (req, res) => {
-      res.json({ acknowledged: true });
-    },
-  );
+  router.post(['/_transform/:id/_start', '/_transform/:id/_stop'], (req, res) => {
+    res.json({ acknowledged: true });
+  });
 
   // Upgrade transforms endpoint
   router.post('/_transform/_upgrade', (req, res) => {

@@ -86,10 +86,10 @@ export function createEsqlRouter() {
       columns,
       values: [],
     };
-    
+
     // Store for GET endpoint
     asyncQueryStore.set(id, result);
-    
+
     res.json(result);
   });
 
@@ -148,16 +148,16 @@ export function createEsqlRouter() {
 
   // ES|QL views endpoints (alternative paths)
   router.put('/_query/esql/view/:name', (req, res) => {
-    res.json({ 
-      acknowledged: true, 
+    res.json({
+      acknowledged: true,
       result: 'created',
-      views: [{ name: req.params.name, query: req.body?.query || '' }]
+      views: [{ name: req.params.name, query: req.body?.query || '' }],
     });
   });
 
   router.get('/_query/esql/view/:name', (req, res) => {
-    res.json({ 
-      views: [{ name: req.params.name, query: 'FROM test_esql_view | WHERE animal == "dog"' }] 
+    res.json({
+      views: [{ name: req.params.name, query: 'FROM test_esql_view | WHERE animal == "dog"' }],
     });
   });
 

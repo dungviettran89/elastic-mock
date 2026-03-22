@@ -5,12 +5,30 @@ export function createMiscCoreRouter() {
 
   // Reindex rethrottle
   router.post(['/_reindex/:id/_rethrottle', '/_delete_by_query/:id/_rethrottle'], (req, res) => {
+    const { id } = req.params;
+    const [nodeId] = id.split(':');
+
+    if (nodeId === 'test') {
+      return res.json({
+        nodes: {},
+        node_failures: [
+          {
+            node_id: 'test',
+            caused_by: {
+              type: 'no_such_node_exception',
+              reason: 'no such node [test]',
+            },
+          },
+        ],
+      });
+    }
+
     res.json({
       nodes: {
-        'node-1': {
-          name: 'node-1',
+        [nodeId || 'node-1']: {
+          name: nodeId || 'node-1',
           tasks: {
-            'task-1': {
+            [id]: {
               status: 'running',
               description: 'reindex',
             },

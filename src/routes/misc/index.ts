@@ -24,12 +24,14 @@ import { createPitRouter } from './pit.js';
 import { createIlmRouter } from './ilm.js';
 import { createLicenseRouter } from './license.js';
 import { createMiscCoreRouter } from './misc_core.js';
+import { createTasksRouter } from './tasks.js';
 
 export function createMiscRouter() {
   const router = Router();
 
   // Use all sub-routers - order matters! License before MiscCore to avoid conflicts
   router.use(createLicenseRouter());
+  router.use(createTasksRouter());
   router.use(createWatcherRouter());
   router.use(createScriptsRouter());
   router.use(createSqlRouter());

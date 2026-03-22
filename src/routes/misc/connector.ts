@@ -72,7 +72,12 @@ export function createConnectorRouter() {
                 advanced_snippet: {
                   created_at: '2023-05-25T12:30:00.000Z',
                   updated_at: '2023-05-25T12:30:00.000Z',
-                  value: [{ tables: ['some_table'], query: 'SELECT id, st_geohash(coordinates) FROM my_db.some_table;' }],
+                  value: [
+                    {
+                      tables: ['some_table'],
+                      query: 'SELECT id, st_geohash(coordinates) FROM my_db.some_table;',
+                    },
+                  ],
                 },
                 rules: [
                   {
@@ -91,7 +96,12 @@ export function createConnectorRouter() {
                 advanced_snippet: {
                   created_at: '2023-05-25T12:30:00.000Z',
                   updated_at: '2023-05-25T12:30:00.000Z',
-                  value: [{ tables: ['some_table'], query: 'SELECT id, st_geohash(coordinates) FROM my_db.some_table;' }],
+                  value: [
+                    {
+                      tables: ['some_table'],
+                      query: 'SELECT id, st_geohash(coordinates) FROM my_db.some_table;',
+                    },
+                  ],
                 },
                 rules: [
                   {

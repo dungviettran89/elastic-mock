@@ -3,6 +3,7 @@ import { Router } from 'express';
 // Simple in-memory store for data stream options
 const dataStreamOptionsStore = new Map<string, any>();
 const dataStreamOptionsExplicitlySet = new Map<string, boolean>();
+const streamStates = new Map<string, boolean>();
 
 export function createDataStreamRouter() {
   const router = Router();
@@ -80,14 +81,14 @@ export function createDataStreamRouter() {
   router.put('/_data_stream/:name/_options', (req, res) => {
     const name = req.params.name;
     const body = req.body || {};
-    
+
     // Add default values for lifecycle.enabled if not present
     if (body.failure_store && body.failure_store.lifecycle) {
       if (body.failure_store.lifecycle.enabled === undefined) {
         body.failure_store.lifecycle.enabled = true;
       }
     }
-    
+
     dataStreamOptionsStore.set(name, body);
     dataStreamOptionsExplicitlySet.set(name, true);
     res.json({ acknowledged: true });
@@ -192,15 +193,39 @@ export function createDataStreamRouter() {
   });
 
   router.post('/_streams/:log/_enable', (req, res) => {
+    streamStates.set(req.params.log, true);
     res.json({ acknowledged: true });
   });
 
   router.post('/_streams/:log/_disable', (req, res) => {
+    streamStates.set(req.params.log, false);
     res.json({ acknowledged: true });
   });
 
   router.get('/_streams/status', (req, res) => {
-    res.json({ 'logs.otel': { enabled: true } });
+    const result: any = {};
+    const addState = (name: string, enabled: boolean) => {
+      result[name] = { enabled };
+      if (name.includes('.')) {
+        const parts = name.split('.');
+        let curr = result;
+        for (let i = 0; i < parts.length - 1; i++) {
+          if (!curr[parts[i]]) curr[parts[i]] = {};
+          curr = curr[parts[i]];
+        }
+        curr[parts[parts.length - 1]] = { enabled };
+      }
+    };
+
+    for (const [name, enabled] of streamStates.entries()) {
+      addState(name, enabled);
+    }
+
+    // Default for test if not explicitly set
+    if (!result['logs.otel'] && !result.logs?.otel) {
+      addState('logs.otel', true);
+    }
+    res.json(result);
   });
 
   return router;
