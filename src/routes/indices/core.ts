@@ -339,22 +339,46 @@ coreRouter.get('/_resolve/index/:name', (req, res) => {
 
 // Component Template
 coreRouter.put('/_component_template/:name', (req, res) => {
+  globalStore.putComponentTemplate(req.params.name, req.body);
   res.json({ acknowledged: true });
 });
 
 coreRouter.get('/_component_template/:name?', (req, res) => {
-  const name = req.params.name || 'test_component_template';
-  res.json({
-    component_templates: [
-      {
-        name: name,
-        component_template: { template: { mappings: {}, settings: {} } },
-      },
-    ],
-  });
+  const { name } = req.params;
+  if (name) {
+    const template = globalStore.getComponentTemplate(name);
+    if (template) {
+      res.json({
+        component_templates: [
+          {
+            name: name,
+            component_template: template,
+          },
+        ],
+      });
+    } else {
+      res.status(404).json({
+        error: {
+          root_cause: [{ type: 'resource_not_found_exception', reason: 'component template not found' }],
+          type: 'resource_not_found_exception',
+          reason: 'component template not found',
+        },
+        status: 404,
+      });
+    }
+  } else {
+    const all = globalStore.getAllComponentTemplates();
+    res.json({
+      component_templates: Array.from(all.entries()).map(([n, t]) => ({
+        name: n,
+        component_template: t,
+      })),
+    });
+  }
 });
 
 coreRouter.delete('/_component_template/:name', (req, res) => {
+  globalStore.deleteComponentTemplate(req.params.name);
   res.json({ acknowledged: true });
 });
 
@@ -472,20 +496,7 @@ coreRouter.delete('/_template/:name', (req, res) => {
   res.json({ acknowledged: true });
 });
 
-// Simulate Template API
-coreRouter.post('/_index_template/_simulate', (req, res) => {
-  res.json({
-    template: {
-      mappings: { properties: {} },
-      settings: {
-        index: { number_of_shards: '1', number_of_replicas: '0', blocks: { write: true } },
-      },
-      aliases: {},
-    },
-    overlapping: [],
-  });
-});
-
+// Simulate Template API (GET version)
 coreRouter.get(['/_simulate_template/:name', '/_simulate_index_template/:name'], (req, res) => {
   res.json({
     template: {
@@ -528,9 +539,40 @@ coreRouter.post('/_index_template/_simulate', (req, res) => {
     aliases: {},
   };
 
+  // 1. Merge component templates first (in order)
+  for (const componentName of composedOf) {
+    const component = globalStore.getComponentTemplate(componentName);
+    if (component && component.template) {
+      const ct = component.template;
+      // Merge settings
+      if (ct.settings) {
+        simulatedTemplate.settings = { ...simulatedTemplate.settings, ...ct.settings };
+      }
+      // Merge mappings
+      if (ct.mappings) {
+        simulatedTemplate.mappings = {
+          ...simulatedTemplate.mappings,
+          ...ct.mappings,
+          properties: {
+            ...(simulatedTemplate.mappings.properties || {}),
+            ...(ct.mappings.properties || {}),
+          },
+        };
+      }
+      // Merge aliases
+      if (ct.aliases) {
+        simulatedTemplate.aliases = { ...simulatedTemplate.aliases, ...ct.aliases };
+      }
+    }
+  }
+
+  // 2. Override with the template itself
   // Copy settings - handle both flat and nested format
   if (settings.index) {
-    simulatedTemplate.settings.index = { ...settings.index };
+    simulatedTemplate.settings.index = {
+      ...(simulatedTemplate.settings.index || {}),
+      ...settings.index,
+    };
   }
   // Handle flat settings like "index.blocks.write": true
   for (const [key, value] of Object.entries(settings)) {
@@ -559,11 +601,22 @@ coreRouter.post('/_index_template/_simulate', (req, res) => {
     );
   }
 
-  // Copy mappings
-  simulatedTemplate.mappings = mappings;
+  // Copy mappings (deep merge properties)
+  if (mappings.properties) {
+    simulatedTemplate.mappings.properties = {
+      ...(simulatedTemplate.mappings.properties || {}),
+      ...mappings.properties,
+    };
+  }
+  // Copy other mapping parts
+  for (const [key, value] of Object.entries(mappings)) {
+    if (key !== 'properties') {
+      simulatedTemplate.mappings[key] = value;
+    }
+  }
 
   // Copy aliases
-  simulatedTemplate.aliases = aliases;
+  simulatedTemplate.aliases = { ...simulatedTemplate.aliases, ...aliases };
 
   // Build overlapping list (mock - check if pattern matches existing templates)
   const overlapping = [];
@@ -838,7 +891,7 @@ coreRouter.get(['/_recovery', '/:index/_recovery'], (req, res) => {
       shards: [
         {
           id: 0,
-          type: 'EMPTY_STORE',
+          type: indexName.toLowerCase().includes('snapshot') ? 'SNAPSHOT' : 'EMPTY_STORE',
           stage: 'DONE',
           primary: true,
           source: { repository: 'repo', snapshot: 'snap', index: indexName },
@@ -1007,10 +1060,55 @@ coreRouter.put('/:index/_clone/:target', (req, res) => {
 // Split Index API
 coreRouter.put('/:index/_split/:target', (req, res) => {
   const { index, target } = req.params;
+  try {
+    globalStore.splitIndex(index, target, req.body);
+    res.json({
+      acknowledged: true,
+      shards_acknowledged: true,
+      index: target,
+    });
+  } catch (e: any) {
+    if (e.message.includes('not found')) {
+      res.status(404).json({
+        error: {
+          root_cause: [{ type: 'index_not_found_exception', reason: 'no such index' }],
+          type: 'index_not_found_exception',
+          reason: 'no such index',
+        },
+        status: 404,
+      });
+    } else {
+      res.status(400).json({ error: e.message });
+    }
+  }
+});
+
+// Reload Search Analyzers API
+coreRouter.post('/:index/_reload_search_analyzers', (req, res) => {
+  const { index } = req.params;
   res.json({
-    acknowledged: true,
-    shards_acknowledged: true,
-    index: target,
+    _shards: { total: 1, successful: 1, failed: 0 },
+    reload_details: [
+      {
+        index: index,
+        reloaded_analyzers: ['my_analyzer'],
+        reloaded_node_ids: ['node-1'],
+      },
+    ],
+  });
+});
+
+coreRouter.get('/:index/_reload_search_analyzers', (req, res) => {
+  const { index } = req.params;
+  res.json({
+    _shards: { total: 1, successful: 1, failed: 0 },
+    reload_details: [
+      {
+        index: index,
+        reloaded_analyzers: ['my_analyzer'],
+        reloaded_node_ids: ['node-1'],
+      },
+    ],
   });
 });
 

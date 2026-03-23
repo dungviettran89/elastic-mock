@@ -16,6 +16,7 @@ export class Store {
   private indices: Map<string, IndexState> = new Map();
   private templates: Map<string, any> = new Map();
   private indexTemplates: Map<string, any> = new Map();
+  private componentTemplates: Map<string, any> = new Map();
   private ingestPipelines: Map<string, any> = new Map();
   private geoipDatabases: Map<string, any> = new Map();
   private synonymsSets: Map<string, any> = new Map();
@@ -175,6 +176,23 @@ export class Store {
 
   deleteIndexTemplate(name: string): boolean {
     return this.indexTemplates.delete(name);
+  }
+
+  // Component Template Management
+  putComponentTemplate(name: string, body: any) {
+    this.componentTemplates.set(name, body);
+  }
+
+  getComponentTemplate(name: string): any {
+    return this.componentTemplates.get(name);
+  }
+
+  getAllComponentTemplates(): Map<string, any> {
+    return this.componentTemplates;
+  }
+
+  deleteComponentTemplate(name: string): boolean {
+    return this.componentTemplates.delete(name);
   }
 
   createIndex(name: string, body: any) {
@@ -1017,6 +1035,27 @@ export class Store {
 
   deleteRoleMapping(name: string): boolean {
     return this.roleMappings.delete(name);
+  }
+
+  splitIndex(sourceIndexName: string, targetIndexName: string, body?: any) {
+    const sourceIndex = this.indices.get(sourceIndexName);
+    if (!sourceIndex) {
+      throw new Error(`Index [${sourceIndexName}] not found`);
+    }
+
+    const newSettings = { ...sourceIndex.settings, ...(body?.settings || {}) };
+    this.createIndex(targetIndexName, {
+      mappings: sourceIndex.mappings,
+      settings: newSettings,
+    });
+
+    const targetIndex = this.indices.get(targetIndexName);
+    if (targetIndex) {
+      for (const [id, doc] of sourceIndex.documents.entries()) {
+        targetIndex.documents.set(id, doc);
+        targetIndex.searchIndex.add({ id, ...doc });
+      }
+    }
   }
 
   cloneIndex(sourceIndexName: string, targetIndexName: string) {

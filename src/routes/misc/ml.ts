@@ -5,7 +5,10 @@ const calendars = new Map<string, any>();
 const calendarEvents = new Map<string, any[]>();
 const jobs = new Map<string, any>();
 const jobStates = new Map<string, string>();
+const datafeeds = new Map<string, any>();
+const datafeedStates = new Map<string, string>();
 const trainedModelDeployments = new Map<string, any>();
+let upgradeMode = false;
 
 function parseDate(dateStr: any): number {
   if (!dateStr) return Date.now();
@@ -177,8 +180,14 @@ export function createMlRouter() {
         datafeeds: { scroll_size: 1000 },
       },
       limits: { max_model_memory_limit: '1gb' },
-      upgrade_mode: false,
+      upgrade_mode: upgradeMode,
     });
+  });
+
+  router.post('/_ml/set_upgrade_mode', (req, res) => {
+    const enabled = req.query.enabled === 'true' || req.body?.enabled === true;
+    upgradeMode = enabled;
+    res.json({ acknowledged: true });
   });
 
   router.get('/_ml/memory/_stats', (req, res) => {
@@ -267,14 +276,26 @@ export function createMlRouter() {
   router.get('/_ml/anomaly_detectors/:id/_stats', (req, res) => {
     const id = req.params.id;
     if (id === '_all' || id === '*') {
-      const list = Array.from(jobs.keys()).map((jobId) => ({
-        job_id: jobId,
-        state: jobStates.get(jobId) || 'closed',
-      }));
+      const list = Array.from(jobs.keys()).map((jobId) => {
+        const result: any = {
+          job_id: jobId,
+          state: jobStates.get(jobId) || 'closed',
+        };
+        if (upgradeMode) {
+          result.assignment_explanation =
+            'persistent task cannot be assigned while upgrade mode is enabled.';
+        }
+        return result;
+      });
       return res.json({ count: list.length, jobs: list });
     }
     const state = jobStates.get(id) || 'closed';
-    res.json({ count: 1, jobs: [{ job_id: id, state }] });
+    const result: any = { job_id: id, state };
+    if (upgradeMode) {
+      result.assignment_explanation =
+        'persistent task cannot be assigned while upgrade mode is enabled.';
+    }
+    res.json({ count: 1, jobs: [result] });
   });
 
   router.post('/_ml/anomaly_detectors/:id/_update', (req, res) => {
@@ -499,21 +520,52 @@ export function createMlRouter() {
     res.json({ acknowledged: true });
   });
 
+  router.get('/_ml/anomaly_detectors/:id/model_snapshots/_all/_upgrade/_stats', (req, res) => {
+    res.json({
+      count: 0,
+      model_snapshot_upgrade_stats: [],
+    });
+  });
+
   router.post('/_ml/anomaly_detectors/_estimate_model_memory', (req, res) => {
     res.json({ model_memory_estimate: '1573mb' });
   });
 
   // Datafeeds
   router.get('/_ml/datafeeds/:id/stats', (req, res) => {
-    res.json({ count: 1, datafeeds: [{ datafeed_id: req.params.id, state: 'started' }] });
+    const id = req.params.id;
+    const state = datafeedStates.get(id) || 'stopped';
+    const result: any = { datafeed_id: id, state };
+    if (upgradeMode) {
+      result.assignment_explanation =
+        'persistent task cannot be assigned while upgrade mode is enabled.';
+    }
+    res.json({ count: 1, datafeeds: [result] });
   });
 
   router.get('/_ml/datafeeds/:id/_stats', (req, res) => {
     const id = req.params.id;
-    if (id === '_all') {
-      return res.json({ count: 0, datafeeds: [] });
+    if (id === '_all' || id === '*') {
+      const list = Array.from(datafeeds.keys()).map((dfId) => {
+        const result: any = {
+          datafeed_id: dfId,
+          state: datafeedStates.get(dfId) || 'stopped',
+        };
+        if (upgradeMode) {
+          result.assignment_explanation =
+            'persistent task cannot be assigned while upgrade mode is enabled.';
+        }
+        return result;
+      });
+      return res.json({ count: list.length, datafeeds: list });
     }
-    res.json({ count: 1, datafeeds: [{ datafeed_id: id, state: 'started' }] });
+    const state = datafeedStates.get(id) || 'stopped';
+    const result: any = { datafeed_id: id, state };
+    if (upgradeMode) {
+      result.assignment_explanation =
+        'persistent task cannot be assigned while upgrade mode is enabled.';
+    }
+    res.json({ count: 1, datafeeds: [result] });
   });
 
   router.get('/_ml/datafeeds/:id/_preview', (req, res) => {
@@ -541,9 +593,14 @@ export function createMlRouter() {
   router.get('/_ml/datafeeds/:id?', (req, res) => {
     const id = req.params.id;
     if (id && id !== '_all' && id !== '*') {
-      return res.json({ count: 1, datafeeds: [{ datafeed_id: id, job_id: 'job-1' }] });
+      const df = datafeeds.get(id);
+      if (df) {
+        return res.json({ count: 1, datafeeds: [df] });
+      }
+      return res.json({ count: 0, datafeeds: [] });
     }
-    res.json({ count: 0, datafeeds: [] });
+    const list = Array.from(datafeeds.values());
+    res.json({ count: list.length, datafeeds: list });
   });
 
   router.put('/_ml/datafeeds/:id', (req, res) => {
@@ -555,14 +612,17 @@ export function createMlRouter() {
         body = {};
       }
     }
-    res.json({
+    const df = {
       datafeed_id: req.params.id,
       job_id: body.job_id || 'mock-job',
       indices: body.indices || body.indexes || ['*'],
       scroll_size: body.scroll_size || 1000,
       query: body.query || { match_all: {} },
       chunking_config: body.chunking_config || { mode: 'auto' },
-    });
+    };
+    datafeeds.set(req.params.id, df);
+    datafeedStates.set(req.params.id, 'stopped');
+    res.json(df);
   });
 
   router.post('/_ml/datafeeds/:id/_update', (req, res) => {
@@ -573,6 +633,10 @@ export function createMlRouter() {
       } catch {
         body = {};
       }
+    }
+    const df = datafeeds.get(req.params.id);
+    if (df) {
+      Object.assign(df, body);
     }
     res.json({
       datafeed_id: req.params.id,
@@ -585,14 +649,18 @@ export function createMlRouter() {
   });
 
   router.post('/_ml/datafeeds/:id/_start', (req, res) => {
+    datafeedStates.set(req.params.id, 'started');
     res.json({ acknowledged: true });
   });
 
   router.post('/_ml/datafeeds/:id/_stop', (req, res) => {
+    datafeedStates.set(req.params.id, 'stopped');
     res.json({ acknowledged: true });
   });
 
   router.delete('/_ml/datafeeds/:id', (req, res) => {
+    datafeeds.delete(req.params.id);
+    datafeedStates.delete(req.params.id);
     res.json({ acknowledged: true });
   });
 
@@ -741,13 +809,13 @@ export function createMlRouter() {
 
     if (start) {
       const startTime = parseDate(start);
-      // Event overlaps with [start, inf] if e.end_time >= start
-      events = events.filter((e) => parseDate(e.end_time) >= startTime);
+      // Event overlaps with [start, inf] if e.end_time > start
+      events = events.filter((e) => parseDate(e.end_time) > startTime);
     }
     if (end) {
       const endTime = parseDate(end);
-      // Event overlaps with [-inf, end] if e.start_time <= end
-      events = events.filter((e) => parseDate(e.start_time) <= endTime);
+      // Event overlaps with [-inf, end] if e.start_time < end
+      events = events.filter((e) => parseDate(e.start_time) < endTime);
     }
 
     // Support from/size in query or body or page object

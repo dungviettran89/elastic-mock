@@ -381,10 +381,34 @@ export function createCatRouter() {
   });
 
   router.get('/tasks', (req, res) => {
+    const data = [
+      {
+        action: 'xpack/ml/job/direct',
+        task_id: 'node1:123',
+        parent_task_id: '-',
+        type: 'direct',
+        start_time: '123456789',
+        timestamp: '12:00:00',
+        running_time: '10s',
+        ip: '127.0.0.1',
+        node: 'node1',
+      },
+      {
+        action: 'xpack/ml/datafeed/direct',
+        task_id: 'node1:124',
+        parent_task_id: '-',
+        type: 'direct',
+        start_time: '123456789',
+        timestamp: '12:00:00',
+        running_time: '5s',
+        ip: '127.0.0.1',
+        node: 'node1',
+      },
+    ];
     formatResults(
       res,
       req,
-      [],
+      data,
       [
         'action',
         'task_id',

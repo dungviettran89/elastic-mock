@@ -197,30 +197,25 @@ export function createConnectorRouter() {
     const name = req.params.name;
     const connector = connectorsStore.get(name);
     if (connector) {
-      let filtering = connector.filtering;
-      if (!filtering || filtering.length === 0) {
-        filtering = [{ draft: {}, active: {} }];
+      if (!connector.filtering || connector.filtering.length === 0) {
+        connector.filtering = [{ 
+          draft: { advanced_snippet: { value: [] }, rules: [] }, 
+          active: { advanced_snippet: { value: [] }, rules: [] } 
+        }];
       }
-      let draftFiltering = filtering[0];
-      if (!draftFiltering) {
-        draftFiltering = { draft: {}, active: {} };
-        filtering[0] = draftFiltering;
-      }
+      
+      const draftFiltering = connector.filtering[0];
 
       if (req.body?.advanced_snippet) {
-        draftFiltering.draft = draftFiltering.draft || {};
-        // Deep merge advanced_snippet to preserve nested structure
         draftFiltering.draft.advanced_snippet = {
-          ...(draftFiltering.draft.advanced_snippet || {}),
+          ...draftFiltering.draft.advanced_snippet,
           ...req.body.advanced_snippet,
         };
       }
       if (req.body?.rules) {
-        draftFiltering.draft = draftFiltering.draft || {};
         draftFiltering.draft.rules = req.body.rules;
       }
 
-      connector.filtering = filtering;
       connectorsStore.set(name, connector);
     }
     res.json({ acknowledged: true, result: 'updated' });
@@ -230,18 +225,18 @@ export function createConnectorRouter() {
     res.json({ acknowledged: true, result: 'updated' });
   });
 
-  router.put('/_connector/:name/_active_filtering', (req, res) => {
+  router.put('/_connector/:name/_filtering/_activate', (req, res) => {
     const name = req.params.name;
     const connector = connectorsStore.get(name);
-    if (connector) {
-      const filtering = connector.filtering || [];
-      if (filtering[0] && filtering[0].draft) {
-        // Deep copy draft to active
-        filtering[0].active = JSON.parse(JSON.stringify(filtering[0].draft));
-        connector.filtering = filtering;
-        connectorsStore.set(name, connector);
-      }
+    if (connector && connector.filtering && connector.filtering[0]) {
+      // Deep copy draft to active
+      connector.filtering[0].active = JSON.parse(JSON.stringify(connector.filtering[0].draft));
+      connectorsStore.set(name, connector);
     }
+    res.json({ acknowledged: true, result: 'updated' });
+  });
+
+  router.put('/_connector/:name/_active_filtering', (req, res) => {
     res.json({ acknowledged: true, result: 'updated' });
   });
 
@@ -323,10 +318,6 @@ export function createConnectorRouter() {
       connector.api_key_id = req.body.api_key_id;
       connectorsStore.set(req.params.name, connector);
     }
-    res.json({ acknowledged: true, result: 'updated' });
-  });
-
-  router.put('/_connector/:name/_filtering/_activate', (req, res) => {
     res.json({ acknowledged: true, result: 'updated' });
   });
 

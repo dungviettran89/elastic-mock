@@ -25,6 +25,7 @@ import { createIlmRouter } from './ilm.js';
 import { createLicenseRouter } from './license.js';
 import { createMiscCoreRouter } from './misc_core.js';
 import { createTasksRouter } from './tasks.js';
+import { createSnapshotRouter } from './snapshot.js';
 
 export function createMiscRouter() {
   const router = Router();
@@ -32,6 +33,7 @@ export function createMiscRouter() {
   // Use all sub-routers - order matters! License before MiscCore to avoid conflicts
   router.use(createLicenseRouter());
   router.use(createTasksRouter());
+  router.use(createSnapshotRouter());
   router.use(createWatcherRouter());
   router.use(createScriptsRouter());
   router.use(createSqlRouter());

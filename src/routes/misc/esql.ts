@@ -3,6 +3,9 @@ import { Router } from 'express';
 // In-memory store for async query results
 const asyncQueryStore = new Map<string, any>();
 
+// In-memory store for ESQL views
+const viewsStore = new Map<string, { name: string; query: string }>();
+
 // Helper function to extract index name from FROM clause
 function extractIndexName(query: string): string | null {
   const fromMatch = query.match(/FROM\s+([a-zA-Z0-9_-]+)/i);
@@ -137,6 +140,45 @@ export function createEsqlRouter() {
     res.json({ queries: {} });
   });
 
+  // ES|QL views endpoints (alternative paths)
+  router.put(['/_query/esql/view/:name', '/_esql/view/:name'], (req, res) => {
+    const { name } = req.params;
+    const { query } = req.body || {};
+    viewsStore.set(name, { name, query: query || '' });
+    res.json({
+      acknowledged: true,
+      result: 'created',
+      views: [viewsStore.get(name)],
+    });
+  });
+
+  router.get(['/_query/esql/view/:name', '/_esql/view/:name'], (req, res) => {
+    const { name } = req.params;
+    const view = viewsStore.get(name);
+    if (view) {
+      res.json({
+        views: [view],
+      });
+    } else {
+      res.status(404).json({
+        error: {
+          type: 'resource_not_found_exception',
+          reason: `View [${name}] not found`,
+        },
+      });
+    }
+  });
+
+  router.get(['/_query/esql/view', '/_esql/view'], (req, res) => {
+    res.json({ views: Array.from(viewsStore.values()) });
+  });
+
+  router.delete(['/_query/esql/view/:name', '/_esql/view/:name'], (req, res) => {
+    const { name } = req.params;
+    viewsStore.delete(name);
+    res.json({ acknowledged: true });
+  });
+
   router.get('/_query/esql/:id', (req, res) => {
     res.status(400).json({
       error: {
@@ -146,44 +188,11 @@ export function createEsqlRouter() {
     });
   });
 
-  // ES|QL views endpoints (alternative paths)
-  router.put('/_query/esql/view/:name', (req, res) => {
-    res.json({
-      acknowledged: true,
-      result: 'created',
-      views: [{ name: req.params.name, query: req.body?.query || '' }],
-    });
-  });
-
-  router.get('/_query/esql/view/:name', (req, res) => {
-    res.json({
-      views: [{ name: req.params.name, query: 'FROM test_esql_view | WHERE animal == "dog"' }],
-    });
-  });
-
-  router.get('/_query/esql/view', (req, res) => {
-    res.json({ views: [] });
-  });
-
-  router.delete('/_query/esql/view/:name', (req, res) => {
-    res.json({ acknowledged: true });
-  });
+  // Legacy /_esql paths (keep for backward compatibility)
 
   // Legacy /_esql paths (keep for backward compatibility)
   router.get('/_esql/queries', (req, res) => {
     res.json({ queries: [] });
-  });
-
-  router.put('/_esql/view/:name', (req, res) => {
-    res.json({ acknowledged: true, result: 'created' });
-  });
-
-  router.get('/_esql/view/:name', (req, res) => {
-    res.json({ name: req.params.name, query: 'SELECT 1' });
-  });
-
-  router.delete('/_esql/view/:name', (req, res) => {
-    res.json({ acknowledged: true });
   });
 
   return router;

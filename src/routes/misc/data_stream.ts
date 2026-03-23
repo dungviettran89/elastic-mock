@@ -3,7 +3,9 @@ import { Router } from 'express';
 // Simple in-memory store for data stream options
 const dataStreamOptionsStore = new Map<string, any>();
 const dataStreamOptionsExplicitlySet = new Map<string, boolean>();
+const dataStreamMappingsStore = new Map<string, any>();
 const streamStates = new Map<string, boolean>();
+const existingDataStreams = new Set<string>();
 
 export function createDataStreamRouter() {
   const router = Router();
@@ -13,10 +15,12 @@ export function createDataStreamRouter() {
   });
 
   router.post('/_data_stream/_migrate/:name', (req, res) => {
+    existingDataStreams.add(req.params.name);
     res.json({ acknowledged: true });
   });
 
   router.put('/_data_stream/:name/_lifecycle', (req, res) => {
+    existingDataStreams.add(req.params.name);
     res.json({ acknowledged: true });
   });
 
@@ -53,13 +57,13 @@ export function createDataStreamRouter() {
 
   router.get('/_data_stream/:name/_options', (req, res) => {
     const name = req.params.name;
-    const storedOptions = dataStreamOptionsStore.get(name);
     const explicitlySet = dataStreamOptionsExplicitlySet.get(name);
+    const storedOptions = dataStreamOptionsStore.get(name);
 
     let options: any = false;
-    if (explicitlySet && storedOptions !== undefined) {
-      options = storedOptions;
-    } else if (!explicitlySet && name === 'failure-data-stream') {
+    if (explicitlySet) {
+      options = storedOptions !== undefined ? storedOptions : false;
+    } else if (name === 'failure-data-stream' && existingDataStreams.has(name)) {
       // Default options from template for this specific data stream
       options = {
         failure_store: {
@@ -81,11 +85,19 @@ export function createDataStreamRouter() {
   router.put('/_data_stream/:name/_options', (req, res) => {
     const name = req.params.name;
     const body = req.body || {};
+    existingDataStreams.add(name);
 
-    // Add default values for lifecycle.enabled if not present
-    if (body.failure_store && body.failure_store.lifecycle) {
-      if (body.failure_store.lifecycle.enabled === undefined) {
-        body.failure_store.lifecycle.enabled = true;
+    // Normalize boolean values
+    if (body.failure_store) {
+      if (body.failure_store.enabled !== undefined) {
+        body.failure_store.enabled = body.failure_store.enabled === true || body.failure_store.enabled === 'true';
+      }
+      if (body.failure_store.lifecycle) {
+        if (body.failure_store.lifecycle.enabled === undefined) {
+          body.failure_store.lifecycle.enabled = true;
+        } else {
+          body.failure_store.lifecycle.enabled = body.failure_store.lifecycle.enabled === true || body.failure_store.lifecycle.enabled === 'true';
+        }
       }
     }
 
@@ -96,38 +108,45 @@ export function createDataStreamRouter() {
 
   router.delete('/_data_stream/:name/_options', (req, res) => {
     const name = req.params.name;
-    dataStreamOptionsStore.delete(name);
-    dataStreamOptionsExplicitlySet.delete(name);
+    dataStreamOptionsStore.set(name, undefined);
+    dataStreamOptionsExplicitlySet.set(name, true);
     res.json({ acknowledged: true });
   });
 
   // Data stream mappings endpoint (plural)
   router.get('/_data_stream/:name/_mappings', (req, res) => {
+    const name = req.params.name;
+    const mappings = dataStreamMappingsStore.get(name) || {};
     res.json({
       data_streams: [
         {
-          name: req.params.name,
-          mappings: {},
-          effective_mappings: {},
+          name: name,
+          mappings: mappings,
+          effective_mappings: mappings,
         },
       ],
     });
   });
 
   router.put('/_data_stream/:name/_mappings', (req, res) => {
+    const name = req.params.name;
+    const mappings = req.body || {};
+    existingDataStreams.add(name);
+    dataStreamMappingsStore.set(name, mappings);
     res.json({
       data_streams: [
         {
-          name: req.params.name,
+          name: name,
           applied_to_data_stream: true,
-          mappings: req.body || {},
-          effective_mappings: req.body || {},
+          mappings: mappings,
+          effective_mappings: mappings,
         },
       ],
     });
   });
 
   router.put('/_data_stream/:name/_settings', (req, res) => {
+    existingDataStreams.add(req.params.name);
     res.json({
       data_streams: [
         {
@@ -150,15 +169,21 @@ export function createDataStreamRouter() {
   });
 
   router.delete('/_data_stream/:name', (req, res) => {
+    const name = req.params.name;
+    dataStreamOptionsStore.delete(name);
+    dataStreamOptionsExplicitlySet.delete(name);
+    existingDataStreams.delete(name);
     res.json({ acknowledged: true });
   });
 
   router.put('/_data_stream/:name', (req, res) => {
+    existingDataStreams.add(req.params.name);
     res.json({ acknowledged: true });
   });
 
   router.get('/_data_stream/:name?', (req, res) => {
     const name = req.params.name || 'logs-test';
+    const mappings = dataStreamMappingsStore.get(name) || {};
     res.json({
       data_streams: [
         {
@@ -174,6 +199,7 @@ export function createDataStreamRouter() {
           status: 'GREEN',
           template: 'template-name',
           settings: {},
+          mappings: mappings,
         },
       ],
     });
@@ -181,49 +207,39 @@ export function createDataStreamRouter() {
 
   // Data stream mapping endpoint (singular - for get_data_stream_mappings API)
   router.get('/_data_stream/:name/_mapping', (req, res) => {
+    const name = req.params.name;
+    const mappings = dataStreamMappingsStore.get(name) || {};
     res.json({
       data_streams: [
         {
-          name: req.params.name,
-          mappings: {},
-          effective_mappings: {},
+          name: name,
+          mappings: mappings,
+          effective_mappings: mappings,
         },
       ],
     });
   });
 
-  router.post('/_streams/:log/_enable', (req, res) => {
+  router.post('/_streams/:log([a-zA-Z0-9.]+)/_enable', (req, res) => {
     streamStates.set(req.params.log, true);
     res.json({ acknowledged: true });
   });
 
-  router.post('/_streams/:log/_disable', (req, res) => {
+  router.post('/_streams/:log([a-zA-Z0-9.]+)/_disable', (req, res) => {
     streamStates.set(req.params.log, false);
     res.json({ acknowledged: true });
   });
 
   router.get('/_streams/status', (req, res) => {
     const result: any = {};
-    const addState = (name: string, enabled: boolean) => {
-      result[name] = { enabled };
-      if (name.includes('.')) {
-        const parts = name.split('.');
-        let curr = result;
-        for (let i = 0; i < parts.length - 1; i++) {
-          if (!curr[parts[i]]) curr[parts[i]] = {};
-          curr = curr[parts[i]];
-        }
-        curr[parts[parts.length - 1]] = { enabled };
-      }
-    };
 
     for (const [name, enabled] of streamStates.entries()) {
-      addState(name, enabled);
+      result[name] = { enabled };
     }
 
     // Default for test if not explicitly set
-    if (!result['logs.otel'] && !result.logs?.otel) {
-      addState('logs.otel', true);
+    if (!result['logs.otel']) {
+      result['logs.otel'] = { enabled: true };
     }
     res.json(result);
   });

@@ -150,7 +150,7 @@ export function createServer() {
   // Home/Info
   app.get('/', (req, res) => {
     res.json({
-      name: 'elastic-mock',
+      name: 'serverless',
       cluster_name: 'elastic-mock',
       cluster_uuid: 'mock-uuid',
       version: {

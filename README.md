@@ -2,6 +2,8 @@
 
 `elastic-mock` is a lightweight, high-performance, in-memory Elasticsearch mock server designed for integration testing. It emulates the Elasticsearch 8.x REST API, allowing you to test search-driven applications without the overhead of a full Elasticsearch cluster.
 
+Developed and maintained by **Gemini** and **Qwen**.
+
 ## Implementation Status: [COMPLETE]
 
 All core phases of the roadmap have been implemented and verified with a comprehensive suite of integration tests.
@@ -54,6 +56,14 @@ curl http://localhost:19200/_cluster/health
 - **Comprehensive Logging**: Detailed request/response logging via `winston`.
 - **Developer Friendly**: Includes `prettier` for formatting and a strict `CI` pipeline.
 
+## Testing
+
+The project is verified against both internal test suites and official Elasticsearch client tests.
+
+- **Internal Tests**: 30 integration and unit tests passing.
+- **External Tests**: Verified using the [elasticsearch-clients-tests](https://github.com/elastic/elasticsearch-clients-tests) suite.
+  - **Status**: **207 passed**, 14 failed.
+
 ## Development
 
 Detailed design, architecture, and implementation information can be found in the [docs/README.md](./docs/README.md).
@@ -65,6 +75,7 @@ As defined in `AGENTS.md`, ensure quality with:
 1. `npm run format`
 2. `npm run build`
 3. `npm run test` (Unit & Integration)
+4. `npm run test:external` (Official client tests)
 
 ## License
 

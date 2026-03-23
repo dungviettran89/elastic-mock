@@ -75,6 +75,19 @@ async function runStep(step: any) {
 
     params = replaceVariables(params);
 
+    // Common parameter renames for client compatibility
+    if (params && typeof params === 'object') {
+      if (actionKey.includes('ilm.') && params.policy) {
+        params.name = params.policy;
+      }
+      if (actionKey.includes('snapshot.') && params.snapshot) {
+        params.snapshot = params.snapshot; // Already correct, but some might need 'name'
+      }
+      if (actionKey.includes('repository') && params.repository) {
+        params.name = params.repository;
+      }
+    }
+
     // Auto-parse string body as JSON if it looks like JSON
     if (
       typeof params === 'string' &&
@@ -132,12 +145,23 @@ async function runStep(step: any) {
       'indices.getDataStreamMappings': { method: 'GET', path: '/_data_stream/{name}/_mapping' },
       'indices.put_data_stream_mappings': { method: 'PUT', path: '/_data_stream/{name}/_mappings' },
       'indices.putDataStreamMappings': { method: 'PUT', path: '/_data_stream/{name}/_mappings' },
+      'indices.put_data_stream_options': { method: 'PUT', path: '/_data_stream/{name}/_options' },
+      'indices.putDataStreamOptions': { method: 'PUT', path: '/_data_stream/{name}/_options' },
+      'indices.get_data_stream_options': { method: 'GET', path: '/_data_stream/{name}/_options' },
+      'indices.getDataStreamOptions': { method: 'GET', path: '/_data_stream/{name}/_options' },
+      'indices.delete_data_stream': { method: 'DELETE', path: '/_data_stream/{name}' },
+      'indices.deleteDataStream': { method: 'DELETE', path: '/_data_stream/{name}' },
+      'indices.recovery': { method: 'GET', path: '/{index}/_recovery' },
+      'indices.create_from': { method: 'POST', path: '/_index/{source}/_create_from/{dest}' },
+      'indices.createFrom': { method: 'POST', path: '/_index/{source}/_create_from/{dest}' },
       'esql.list_queries': { method: 'GET', path: '/_query/esql' },
       'esql.listQueries': { method: 'GET', path: '/_query/esql' },
       'esql.put_view': { method: 'PUT', path: '/_query/esql/view/{name}' },
       'esql.putView': { method: 'PUT', path: '/_query/esql/view/{name}' },
       'esql.get_view': { method: 'GET', path: '/_query/esql/view/{name}' },
       'esql.getView': { method: 'GET', path: '/_query/esql/view/{name}' },
+      'esql.delete_view': { method: 'DELETE', path: '/_query/esql/view/{name}' },
+      'esql.deleteView': { method: 'DELETE', path: '/_query/esql/view/{name}' },
       'esql.get_query': { method: 'GET', path: '/_query/esql/{id}' },
       'esql.getQuery': { method: 'GET', path: '/_query/esql/{id}' },
       'security.get_stats': { method: 'GET', path: '/_security/stats' },
@@ -226,6 +250,10 @@ async function runStep(step: any) {
           delete (params as any)[key];
         }
       }
+      // Remove any remaining placeholders (optional params)
+      path = path.replace(/\/{[a-zA-Z0-9_]+}/g, '');
+      path = path.replace(/{[a-zA-Z0-9_]+}/g, '');
+      
       try {
         const requestParams: any = {
           method: mapping.method,
@@ -302,6 +330,7 @@ async function runStep(step: any) {
       }
       return resData;
     } catch (e: any) {
+      console.error(`   ERROR in runStep (${actionKey}):`, e);
       const errorBody = e.meta?.body || e.body || e;
       const statusCode = e.meta?.statusCode || e.statusCode;
 
@@ -369,8 +398,28 @@ function getValueByPath(obj: any, path: string): any {
   // Try exact path at root
   if (obj && obj[path] !== undefined) return obj[path];
 
+  // Remove trailing dot if present
+  if (path.endsWith('.')) {
+    path = path.substring(0, path.length - 1);
+  }
+
   // Nested path traversal
-  const parts = path.split('.');
+  // Split by dots, but respect escaped dots (\.)
+  const parts: string[] = [];
+  let currentPart = '';
+  for (let i = 0; i < path.length; i++) {
+    if (path[i] === '\\' && path[i + 1] === '.') {
+      currentPart += '.';
+      i++;
+    } else if (path[i] === '.') {
+      parts.push(currentPart);
+      currentPart = '';
+    } else {
+      currentPart += path[i];
+    }
+  }
+  parts.push(currentPart);
+
   let current = data;
 
   // Greedy match for keys with dots: try joining parts back
