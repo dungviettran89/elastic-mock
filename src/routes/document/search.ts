@@ -68,7 +68,10 @@ searchRouter.post('/_search', (req, res) => {
     timed_out: false,
     _shards: { total: indices.length, successful: indices.length, skipped: 0, failed: 0 },
     hits: {
-      total: { value: allHits.length, relation: 'eq' },
+      total:
+        req.query.rest_total_hits_as_int === 'true'
+          ? allHits.length
+          : { value: allHits.length, relation: 'eq' },
       max_score: allHits.length > 0 ? 1.0 : null,
       hits: paginatedHits,
     },

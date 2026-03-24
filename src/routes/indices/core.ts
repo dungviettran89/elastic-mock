@@ -5,8 +5,9 @@ import { logger } from '../../logger.js';
 export const coreRouter = Router();
 
 // Create Index
-coreRouter.put('/:index', (req, res) => {
+coreRouter.put('/:index', (req, res, next) => {
   const { index } = req.params;
+  if (index.startsWith('_')) return next();
   logger.info(`Indices: Creating index [${index}]`);
   try {
     globalStore.createIndex(index, req.body || {});
@@ -30,8 +31,9 @@ coreRouter.put('/:index', (req, res) => {
 });
 
 // Index Exists
-coreRouter.head('/:index', (req, res) => {
+coreRouter.head('/:index', (req, res, next) => {
   const { index } = req.params;
+  if (index.startsWith('_')) return next();
   if (globalStore.hasIndex(index)) {
     res.status(200).end();
   } else {
@@ -40,8 +42,9 @@ coreRouter.head('/:index', (req, res) => {
 });
 
 // Delete Index
-coreRouter.delete('/:index', (req, res) => {
+coreRouter.delete('/:index', (req, res, next) => {
   const { index } = req.params;
+  if (index.startsWith('_')) return next();
   logger.info(`Indices: Deleting index [${index}]`);
   if (globalStore.deleteIndex(index)) {
     res.status(200).json({ acknowledged: true });
@@ -60,9 +63,9 @@ coreRouter.delete('/:index', (req, res) => {
 });
 
 // Get Index
-coreRouter.get('/:index', (req, res) => {
+coreRouter.get('/:index', (req, res, next) => {
   const { index } = req.params;
-  if (index.startsWith('_')) return; // Skip internal APIs if not matched elsewhere
+  if (index.startsWith('_')) return next();
 
   const idx = globalStore.getIndex(index);
   if (idx) {
@@ -359,7 +362,9 @@ coreRouter.get('/_component_template/:name?', (req, res) => {
     } else {
       res.status(404).json({
         error: {
-          root_cause: [{ type: 'resource_not_found_exception', reason: 'component template not found' }],
+          root_cause: [
+            { type: 'resource_not_found_exception', reason: 'component template not found' },
+          ],
           type: 'resource_not_found_exception',
           reason: 'component template not found',
         },
@@ -637,18 +642,29 @@ coreRouter.post('/_index_template/_simulate', (req, res) => {
 });
 
 // Rollover API
-coreRouter.post('/:index/_rollover', (req, res) => {
-  const { index } = req.params;
-  const oldIndex = index.includes('search') ? 'test-logs-1' : index;
-  res.json({
-    acknowledged: true,
-    shards_acknowledged: true,
-    old_index: oldIndex,
-    new_index: `${oldIndex.replace(/-1$/, '')}-000002`,
-    rolled_over: true,
-    dry_run: false,
-    conditions: {},
-  });
+coreRouter.post('/:alias/_rollover/:newIndex?', (req, res) => {
+  const { alias, newIndex } = req.params;
+  try {
+    const result = globalStore.rollover(alias, newIndex);
+    res.json({
+      acknowledged: true,
+      shards_acknowledged: true,
+      old_index: result.old_index,
+      new_index: result.new_index,
+      rolled_over: true,
+      dry_run: false,
+      conditions: {},
+    });
+  } catch (e: any) {
+    res.status(404).json({
+      error: {
+        root_cause: [{ type: 'resource_not_found_exception', reason: e.message }],
+        type: 'resource_not_found_exception',
+        reason: e.message,
+      },
+      status: 404,
+    });
+  }
 });
 
 // Settings API

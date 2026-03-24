@@ -57,7 +57,7 @@ export function createScriptsRouter() {
     });
   });
 
-  router.get('/_script_languages', (req, res) => {
+  router.get('/_script_language', (req, res) => {
     res.json({
       languages: ['painless', 'mustache', 'expression'],
       types_allowed: ['inline', 'stored'],

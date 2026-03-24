@@ -703,10 +703,13 @@ export class Store {
         failed: 0,
       },
       hits: {
-        total: {
-          value: totalHits,
-          relation: 'eq',
-        },
+        total:
+          body.rest_total_hits_as_int === 'true' || body.rest_total_hits_as_int === true
+            ? totalHits
+            : {
+                value: totalHits,
+                relation: 'eq',
+              },
         max_score: totalHits > 0 ? 1.0 : null,
         hits: paginatedHits,
       },
@@ -1056,6 +1059,41 @@ export class Store {
         targetIndex.searchIndex.add({ id, ...doc });
       }
     }
+  }
+
+  rollover(alias: string, newIndexName?: string) {
+    const sourceIndex = this.getIndex(alias);
+    if (!sourceIndex) {
+      throw new Error(`Alias [${alias}] not found`);
+    }
+
+    let newName = newIndexName;
+    if (!newName) {
+      const match = sourceIndex.name.match(/^(.*?)(\d+)$/);
+      if (match) {
+        const prefix = match[1];
+        const num = parseInt(match[2]);
+        newName = `${prefix}${String(num + 1).padStart(6, '0')}`;
+      } else {
+        newName = `${sourceIndex.name}-000001`;
+      }
+    }
+
+    this.createIndex(newName, {
+      mappings: sourceIndex.mappings,
+      settings: sourceIndex.settings,
+    });
+
+    // Move alias
+    sourceIndex.aliases.delete(alias);
+    const targetIndex = this.indices.get(newName)!;
+    targetIndex.aliases.add(alias);
+
+    return {
+      old_index: sourceIndex.name,
+      new_index: newName,
+      rolled_over: true,
+    };
   }
 
   cloneIndex(sourceIndexName: string, targetIndexName: string) {

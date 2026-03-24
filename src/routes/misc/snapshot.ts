@@ -24,7 +24,9 @@ export function createSnapshotRouter() {
       } else {
         res.status(404).json({
           error: {
-            root_cause: [{ type: 'repository_missing_exception', reason: `[${repository}] missing` }],
+            root_cause: [
+              { type: 'repository_missing_exception', reason: `[${repository}] missing` },
+            ],
             type: 'repository_missing_exception',
             reason: `[${repository}] missing`,
           },
@@ -113,7 +115,10 @@ export function createSnapshotRouter() {
           ...snap,
           repository,
           shards_stats: { initializing: 0, started: 1, finalizing: 0, done: 0 },
-          stats: { incremental: { file_count: 0, size_in_bytes: 0 }, total: { file_count: 1, size_in_bytes: 100 } },
+          stats: {
+            incremental: { file_count: 0, size_in_bytes: 0 },
+            total: { file_count: 1, size_in_bytes: 100 },
+          },
         },
       ],
     });
@@ -153,6 +158,57 @@ export function createSnapshotRouter() {
   router.post('/_snapshot/:repository/_analyze', (req, res) => {
     res.json({ repository: req.params.repository });
   });
+
+  // Searchable Snapshots Mount
+  router.post('/_snapshot/:repository/:snapshot/_mount', (req, res) => {
+    const { repository, snapshot } = req.params;
+    res.json({
+      snapshot: {
+        snapshot,
+        indices: [req.body.index || 'test-index'],
+        shards: { total: 1, failed: 0, successful: 1 },
+      },
+    });
+  });
+
+  // Searchable Snapshots Stats
+  router.get('/_searchable_snapshots/stats', (req, res) => {
+    res.json({
+      total_directories_count: 1,
+      directories_count: 1,
+      _shards: { total: 1, successful: 1, failed: 0 },
+    });
+  });
+
+  // Searchable Snapshots Cache Stats
+  router.get('/_searchable_snapshots/cache/stats', (req, res) => {
+    res.json({
+      nodes: {
+        'mock-node-id': {
+          shared_cache: {
+            reads: 0,
+            bytes_read: 0,
+            writes: 0,
+            bytes_written: 0,
+            evictions: 0,
+            num_regions: 100,
+            size_in_bytes: 1024 * 1024 * 1024,
+            region_size_in_bytes: 1024 * 1024,
+          },
+        },
+      },
+    });
+  });
+
+  // Searchable Snapshots Clear Cache
+  router.post(
+    ['/_searchable_snapshots/cache/clear', '/:index/_searchable_snapshots/cache/clear'],
+    (req, res) => {
+      res.json({
+        _shards: { total: 1, successful: 1, failed: 0 },
+      });
+    },
+  );
 
   return router;
 }

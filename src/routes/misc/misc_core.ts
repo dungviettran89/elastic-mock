@@ -98,8 +98,51 @@ export function createMiscCoreRouter() {
   });
 
   // Vector Tiles
-  router.get(['/:index/_mvt/:field/:z/:x/:y', '/_mvt/:field/:z/:x/:y'], (req, res) => {
+  router.all(['/:index/_mvt/:field/:zoom/:x/:y', '/_mvt/:field/:zoom/:x/:y'], (req, res) => {
     res.status(200).send(Buffer.alloc(0));
+  });
+
+  // Features API
+  router.get('/_features', (req, res) => {
+    res.json({
+      features: [
+        {
+          name: 'tasks',
+          description: 'Tasks management',
+        },
+      ],
+    });
+  });
+
+  router.post('/_features/_reset', (req, res) => {
+    res.json({
+      features: [
+        {
+          name: 'tasks',
+          status: 'SUCCESS',
+        },
+      ],
+    });
+  });
+
+  // Health Report API
+  router.get(['/_health_report', '/_health_report/:feature'], (req, res) => {
+    res.json({
+      cluster_name: 'elastic-mock',
+      status: 'green',
+      indicators: {
+        master_is_stable: {
+          status: 'green',
+          symptom: 'The cluster has a stable master node',
+          details: {
+            current_master: {
+              node_id: 'mock-node-id',
+              name: 'elastic-mock',
+            },
+          },
+        },
+      },
+    });
   });
 
   return router;

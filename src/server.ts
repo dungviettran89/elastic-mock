@@ -5,6 +5,7 @@ import { createDocumentRouter } from './routes/document/index.js';
 import { searchRouter } from './routes/document/search.js';
 import { createCatRouter } from './routes/cat/index.js';
 import { createMiscRouter } from './routes/misc/index.js';
+import { createNodesRouter } from './nodes.js';
 import { logger } from './logger.js';
 import { globalStore } from './store.js';
 
@@ -170,6 +171,9 @@ export function createServer() {
 
   // Cluster APIs
   app.use('/', createClusterRouter());
+
+  // Nodes APIs
+  app.use('/_nodes', createNodesRouter());
 
   // CAT APIs
   app.use('/_cat', createCatRouter());

@@ -405,22 +405,17 @@ export function createCatRouter() {
         node: 'node1',
       },
     ];
-    formatResults(
-      res,
-      req,
-      data,
-      [
-        'action',
-        'task_id',
-        'parent_task_id',
-        'type',
-        'start_time',
-        'timestamp',
-        'running_time',
-        'ip',
-        'node',
-      ],
-    );
+    formatResults(res, req, data, [
+      'action',
+      'task_id',
+      'parent_task_id',
+      'type',
+      'start_time',
+      'timestamp',
+      'running_time',
+      'ip',
+      'node',
+    ]);
   });
 
   router.get('/templates/:name?', (req, res) => {

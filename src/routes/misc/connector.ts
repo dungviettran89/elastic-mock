@@ -198,12 +198,14 @@ export function createConnectorRouter() {
     const connector = connectorsStore.get(name);
     if (connector) {
       if (!connector.filtering || connector.filtering.length === 0) {
-        connector.filtering = [{ 
-          draft: { advanced_snippet: { value: [] }, rules: [] }, 
-          active: { advanced_snippet: { value: [] }, rules: [] } 
-        }];
+        connector.filtering = [
+          {
+            draft: { advanced_snippet: { value: [] }, rules: [] },
+            active: { advanced_snippet: { value: [] }, rules: [] },
+          },
+        ];
       }
-      
+
       const draftFiltering = connector.filtering[0];
 
       if (req.body?.advanced_snippet) {

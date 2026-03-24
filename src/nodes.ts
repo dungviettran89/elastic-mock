@@ -11,6 +11,15 @@ export function createNodesRouter() {
         name: 'elastic-mock',
         roles: ['master', 'data', 'ingest'],
         version: '8.10.0',
+        modules: [
+          {
+            name: 'x-pack-ent-search',
+            version: '8.10.0',
+            description: 'Mock enterprise search module',
+            class_name: 'org.elasticsearch.enterprise_search.EnterpriseSearch',
+            has_native_controller: false,
+          },
+        ],
       },
     },
   };
@@ -87,43 +96,6 @@ export function createNodesRouter() {
       res.json(nodesMock);
     },
   );
-
-  return router;
-}
-
-export function createTasksRouter() {
-  const router = Router();
-
-  router.get('/', (req, res) => {
-    res.json({ nodes: {} });
-  });
-
-  router.get('/:id', (req, res) => {
-    if (req.params.id === 'node_id:123456') {
-      return res.status(404).json({
-        error: { type: 'resource_not_found_exception', reason: 'task not found' },
-        status: 404,
-      });
-    }
-    res.json({
-      completed: true,
-      task: {
-        node: 'mock-node-id',
-        id: req.params.id || 'mock-task-id',
-        type: 'transport',
-        action: 'indices:data/write/update/byquery',
-        status: {},
-        description: '',
-        start_time_in_millis: Date.now(),
-        running_time_in_nanos: 10000,
-        cancellable: true,
-      },
-    });
-  });
-
-  router.post(['/cancel', '/_cancel', '/:id/cancel', '/:id/_cancel'], (req, res) => {
-    res.json({ nodes: [] });
-  });
 
   return router;
 }

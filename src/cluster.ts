@@ -39,6 +39,7 @@ export function createClusterRouter() {
     const state: any = {
       cluster_name: 'elastic-mock',
       cluster_uuid: 'z1234567890',
+      master_node: 'mock-node-id',
     };
 
     if (!metric || metric === 'metadata') {

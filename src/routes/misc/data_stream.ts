@@ -90,13 +90,16 @@ export function createDataStreamRouter() {
     // Normalize boolean values
     if (body.failure_store) {
       if (body.failure_store.enabled !== undefined) {
-        body.failure_store.enabled = body.failure_store.enabled === true || body.failure_store.enabled === 'true';
+        body.failure_store.enabled =
+          body.failure_store.enabled === true || body.failure_store.enabled === 'true';
       }
       if (body.failure_store.lifecycle) {
         if (body.failure_store.lifecycle.enabled === undefined) {
           body.failure_store.lifecycle.enabled = true;
         } else {
-          body.failure_store.lifecycle.enabled = body.failure_store.lifecycle.enabled === true || body.failure_store.lifecycle.enabled === 'true';
+          body.failure_store.lifecycle.enabled =
+            body.failure_store.lifecycle.enabled === true ||
+            body.failure_store.lifecycle.enabled === 'true';
         }
       }
     }

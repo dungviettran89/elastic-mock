@@ -253,7 +253,7 @@ async function runStep(step: any) {
       // Remove any remaining placeholders (optional params)
       path = path.replace(/\/{[a-zA-Z0-9_]+}/g, '');
       path = path.replace(/{[a-zA-Z0-9_]+}/g, '');
-      
+
       try {
         const requestParams: any = {
           method: mapping.method,
@@ -454,15 +454,18 @@ function getValueByPath(obj: any, path: string): any {
 function assertMatch(actual: any, expected: any, path: string = '') {
   expected = replaceVariables(expected);
 
-  if (typeof expected === 'string' && expected.startsWith('/') && expected.endsWith('/')) {
-    const regexStr = expected.substring(1, expected.length - 1);
-    const regex = new RegExp(regexStr);
-    if (!regex.test(String(actual))) {
-      throw new Error(
-        `Assertion failed at [${path}]: expected to match [${expected}], got [${actual}]`,
-      );
+  if (typeof expected === 'string') {
+    const trimmedExpected = expected.trim();
+    if (trimmedExpected.startsWith('/') && trimmedExpected.endsWith('/')) {
+      const regexStr = trimmedExpected.substring(1, trimmedExpected.length - 1);
+      const regex = new RegExp(regexStr);
+      if (!regex.test(String(actual))) {
+        throw new Error(
+          `Assertion failed at [${path}]: expected to match [${expected}], got [${actual}]`,
+        );
+      }
+      return;
     }
-    return;
   }
 
   if (typeof expected === 'object' && expected !== null) {
