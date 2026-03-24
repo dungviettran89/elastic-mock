@@ -646,21 +646,26 @@ coreRouter.post('/:alias/_rollover/:newIndex?', (req, res) => {
   const { alias, newIndex } = req.params;
   try {
     const result = globalStore.rollover(alias, newIndex);
-    res.json({
-      acknowledged: true,
-      shards_acknowledged: true,
-      old_index: result.old_index,
-      new_index: result.new_index,
-      rolled_over: true,
-      dry_run: false,
-      conditions: {},
-    });
-  } catch (e: any) {
+    res.json(result);
+  } catch (error: any) {
     res.status(404).json({
       error: {
-        root_cause: [{ type: 'resource_not_found_exception', reason: e.message }],
+        root_cause: [
+          {
+            type: 'resource_not_found_exception',
+            reason: error.message,
+            index_uuid: '_na_',
+            index: alias,
+            'resource.type': 'alias',
+            'resource.id': alias,
+          },
+        ],
         type: 'resource_not_found_exception',
-        reason: e.message,
+        reason: error.message,
+        index_uuid: '_na_',
+        index: alias,
+        'resource.type': 'alias',
+        'resource.id': alias,
       },
       status: 404,
     });

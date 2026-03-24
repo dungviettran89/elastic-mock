@@ -14,6 +14,8 @@ All core phases of the roadmap have been implemented and verified with a compreh
 - ✅ **Aggregation Engine**: `terms`, `avg`, `min`, `max`, and `sum` support.
 - ✅ **Bulk API**: High-volume ingestion via NDJSON.
 - ✅ **CAT APIs**: Human-readable stats for indices, nodes, and health.
+- ✅ **Data Streams**: Native support with backing index management and rollover.
+- ✅ **Machine Learning & Graph**: Support for data frame analytics, snapshot upgrades, and graph exploration.
 - ✅ **Logging**: Structured API logging using Winston.
 
 ## Installation
@@ -62,7 +64,7 @@ The project is verified against both internal test suites and official Elasticse
 
 - **Internal Tests**: 30 integration and unit tests passing.
 - **External Tests**: Verified using the [elasticsearch-clients-tests](https://github.com/elastic/elasticsearch-clients-tests) suite.
-  - **Status**: **207 passed**, 14 failed.
+  - **Status**: **221 passed**, 0 failed.
 
 ## Development
 

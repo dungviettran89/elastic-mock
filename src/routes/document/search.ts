@@ -124,12 +124,6 @@ searchRouter.get('/:index/_count', (req, res) => {
 });
 
 // Term Vectors API
-searchRouter.post(['/_mtermvectors', '/:index/_mtermvectors'], (req, res) => {
-  res.json({
-    docs: [],
-  });
-});
-
 searchRouter.get(['/:index/_termvectors/:id', '/:index/_termvectors'], (req, res) => {
   const { index, id } = req.params;
   res.json({

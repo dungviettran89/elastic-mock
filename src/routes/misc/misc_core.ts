@@ -145,5 +145,9 @@ export function createMiscCoreRouter() {
     });
   });
 
+  router.post('/:index/_graph/explore', (req, res) => {
+    res.json({ took: 1, timed_out: false, failures: [], vertices: [], connections: [] });
+  });
+
   return router;
 }

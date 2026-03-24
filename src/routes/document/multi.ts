@@ -37,11 +37,21 @@ multiRouter.post(['/_mtermvectors', '/:index/_mtermvectors'], (req, res) => {
   res.json({
     docs: [
       {
+        _index: req.params.index || 'mock-index',
+        _id: 'mock-id',
+        found: true,
         term_vectors: {
           text: {
+            field_statistics: { sum_doc_freq: 2, doc_count: 1, sum_ttf: 2 },
             terms: {
               brown: {
+                doc_freq: 1,
+                ttf: 2,
                 term_freq: 2,
+                tokens: [
+                  { position: 2, start_offset: 10, end_offset: 15 },
+                  { position: 5, start_offset: 25, end_offset: 30 },
+                ],
               },
             },
           },

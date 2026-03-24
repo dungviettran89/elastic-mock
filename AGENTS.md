@@ -47,3 +47,5 @@ Before committing any changes, ensure the following steps are completed:
 1.  **Format**: Run `npm run format` to ensure code style consistency.
 2.  **Build**: Run `npm run build` to verify the project compiles correctly.
 3.  **Test**: Run `npm run test`, `npm run test:integration`, and `npm run test:external` to ensure all tests pass.
+
+**Note**: Always run `git push` after a successful commit to sync with the remote repository.

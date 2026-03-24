@@ -8,6 +8,8 @@ const jobStates = new Map<string, string>();
 const datafeeds = new Map<string, any>();
 const datafeedStates = new Map<string, string>();
 const trainedModelDeployments = new Map<string, any>();
+const snapshotUpgrades = new Map<string, any>();
+const dataFrameAnalytics = new Map<string, any>();
 let upgradeMode = false;
 
 function parseDate(dateStr: any): number {
@@ -270,6 +272,11 @@ export function createMlRouter() {
   router.delete('/_ml/anomaly_detectors/:id', (req, res) => {
     jobs.delete(req.params.id);
     jobStates.delete(req.params.id);
+    for (const [key, u] of snapshotUpgrades.entries()) {
+      if (u.job_id === req.params.id) {
+        snapshotUpgrades.delete(key);
+      }
+    }
     res.json({ acknowledged: true });
   });
 
@@ -517,6 +524,7 @@ export function createMlRouter() {
         },
       });
     }
+    snapshotUpgrades.delete(`${req.params.id}_${req.params.snapshot_id}`);
     res.json({ acknowledged: true });
   });
 
@@ -524,6 +532,7 @@ export function createMlRouter() {
     res.json({
       count: 0,
       model_snapshot_upgrade_stats: [],
+      nodes: { 'mock-node': { stopped: true } },
     });
   });
 
@@ -961,7 +970,12 @@ export function createMlRouter() {
           },
         });
       }
-      res.json({ acknowledged: true });
+      snapshotUpgrades.set(`${job_id}_${snapshot_id}`, {
+        job_id,
+        snapshot_id,
+        state: 'failed',
+      });
+      res.json({ acknowledged: true, count: 1 });
     },
   );
 
@@ -975,6 +989,7 @@ export function createMlRouter() {
         },
       });
     }
+    snapshotUpgrades.delete(`${req.params.id}_${req.params.snapshot_id}`);
     res.json({ acknowledged: true });
   });
 
@@ -1000,6 +1015,110 @@ export function createMlRouter() {
     ],
     (req, res) => {
       res.json({ acknowledged: true });
+    },
+  );
+
+  router.put('/_ml/data_frame/analytics/:id', (req, res) => {
+    const id = req.params.id;
+    dataFrameAnalytics.set(id, {
+      id,
+      state: 'started',
+      source: { index: ['test-index'] },
+      dest: { index: 'test-index-out' },
+      analysis: { outlier_detection: {} },
+    });
+    res.json({ acknowledged: true, id });
+  });
+
+  router.get('/_ml/data_frame/analytics/:id', (req, res) => {
+    const id = req.params.id;
+    if (id === '_all' || id === '*') {
+      const all = Array.from(dataFrameAnalytics.values());
+      return res.json({ count: all.length, data_frame_analytics: all });
+    }
+    const item = dataFrameAnalytics.get(id);
+    if (item) {
+      return res.json({ count: 1, data_frame_analytics: [item] });
+    }
+    res.json({ count: 0, data_frame_analytics: [] });
+  });
+
+  router.delete('/_ml/data_frame/analytics/:id', (req, res) => {
+    dataFrameAnalytics.delete(req.params.id);
+    res.json({ acknowledged: true });
+  });
+
+  router.get('/_ml/data_frame/analytics/:id/_stats', (req, res) => {
+    const id = req.params.id;
+    let items = [];
+    if (id === '_all' || id === '*') {
+      items = Array.from(dataFrameAnalytics.values());
+    } else {
+      const item = dataFrameAnalytics.get(id);
+      if (item) items.push(item);
+    }
+
+    res.json({
+      count: items.length,
+      data_frame_analytics: items.map((item) => ({
+        id: item.id,
+        state: item.state,
+        stats: {
+          common_stats: {
+            iteration: 1,
+            timestamp: Date.now(),
+          },
+        },
+      })),
+    });
+  });
+
+  router.get('/_ml/data_frame/analytics/:id/_preview', (req, res) => {
+    res.json({
+      feature_values: [
+        { feature: 'feature1', value: 1.0 },
+        { feature: 'feature2', value: 2.0 },
+      ],
+    });
+  });
+
+  router.post('/_ml/data_frame/analytics/:id/_update', (req, res) => {
+    const id = req.params.id;
+    const body = req.body || {};
+    const item = dataFrameAnalytics.get(id);
+    if (item) {
+      Object.assign(item, body);
+    }
+    res.json({ acknowledged: true, id, ...body });
+  });
+
+  router.post(
+    ['/_ml/data_frame/analytics/:id/_start', '/_ml/data_frame/analytics/:id/_stop'],
+    (req, res) => {
+      const id = req.params.id;
+      if (req.path.endsWith('_stop')) {
+        return res.json({ stopped: true });
+      }
+      res.json({ acknowledged: true });
+    },
+  );
+
+  router.get(
+    '/_ml/anomaly_detectors/:jobId/model_snapshots/:snapshotId/_upgrade/_stats',
+    (req, res) => {
+      const { jobId, snapshotId } = req.params;
+      const upgrades = Array.from(snapshotUpgrades.values()).filter((u) => {
+        if (jobId !== '_all' && jobId !== '*' && u.job_id !== jobId) return false;
+        if (snapshotId !== '_all' && snapshotId !== '*' && u.snapshot_id !== snapshotId)
+          return false;
+        return true;
+      });
+
+      res.json({
+        count: upgrades.length,
+        model_snapshot_upgrades: upgrades,
+        nodes: { 'mock-node': { stopped: true } },
+      });
     },
   );
 

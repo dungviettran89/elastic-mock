@@ -1,11 +1,11 @@
 import { Router } from 'express';
+import { globalStore } from '../../store.js';
 
 // Simple in-memory store for data stream options
 const dataStreamOptionsStore = new Map<string, any>();
 const dataStreamOptionsExplicitlySet = new Map<string, boolean>();
 const dataStreamMappingsStore = new Map<string, any>();
 const streamStates = new Map<string, boolean>();
-const existingDataStreams = new Set<string>();
 
 export function createDataStreamRouter() {
   const router = Router();
@@ -15,12 +15,12 @@ export function createDataStreamRouter() {
   });
 
   router.post('/_data_stream/_migrate/:name', (req, res) => {
-    existingDataStreams.add(req.params.name);
+    globalStore.createDataStream(req.params.name);
     res.json({ acknowledged: true });
   });
 
   router.put('/_data_stream/:name/_lifecycle', (req, res) => {
-    existingDataStreams.add(req.params.name);
+    globalStore.createDataStream(req.params.name);
     res.json({ acknowledged: true });
   });
 
@@ -36,11 +36,12 @@ export function createDataStreamRouter() {
   });
 
   router.get('/_data_stream/:name/_settings', (req, res) => {
+    const ds = globalStore.getDataStream(req.params.name);
     res.json({
       data_streams: [
         {
           name: req.params.name,
-          settings: {},
+          settings: ds?.settings || {},
           effective_settings: {
             index: {
               number_of_shards: '1',
@@ -63,7 +64,7 @@ export function createDataStreamRouter() {
     let options: any = false;
     if (explicitlySet) {
       options = storedOptions !== undefined ? storedOptions : false;
-    } else if (name === 'failure-data-stream' && existingDataStreams.has(name)) {
+    } else if (name === 'failure-data-stream' && globalStore.getDataStream(name)) {
       // Default options from template for this specific data stream
       options = {
         failure_store: {
@@ -85,7 +86,7 @@ export function createDataStreamRouter() {
   router.put('/_data_stream/:name/_options', (req, res) => {
     const name = req.params.name;
     const body = req.body || {};
-    existingDataStreams.add(name);
+    globalStore.createDataStream(name);
 
     // Normalize boolean values
     if (body.failure_store) {
@@ -119,7 +120,8 @@ export function createDataStreamRouter() {
   // Data stream mappings endpoint (plural)
   router.get('/_data_stream/:name/_mappings', (req, res) => {
     const name = req.params.name;
-    const mappings = dataStreamMappingsStore.get(name) || {};
+    const ds = globalStore.getDataStream(name);
+    const mappings = dataStreamMappingsStore.get(name) || ds?.mappings || {};
     res.json({
       data_streams: [
         {
@@ -134,7 +136,7 @@ export function createDataStreamRouter() {
   router.put('/_data_stream/:name/_mappings', (req, res) => {
     const name = req.params.name;
     const mappings = req.body || {};
-    existingDataStreams.add(name);
+    globalStore.createDataStream(name);
     dataStreamMappingsStore.set(name, mappings);
     res.json({
       data_streams: [
@@ -149,7 +151,7 @@ export function createDataStreamRouter() {
   });
 
   router.put('/_data_stream/:name/_settings', (req, res) => {
-    existingDataStreams.add(req.params.name);
+    globalStore.createDataStream(req.params.name);
     res.json({
       data_streams: [
         {
@@ -175,43 +177,65 @@ export function createDataStreamRouter() {
     const name = req.params.name;
     dataStreamOptionsStore.delete(name);
     dataStreamOptionsExplicitlySet.delete(name);
-    existingDataStreams.delete(name);
+    globalStore.deleteDataStream(name);
     res.json({ acknowledged: true });
   });
 
   router.put('/_data_stream/:name', (req, res) => {
-    existingDataStreams.add(req.params.name);
+    globalStore.createDataStream(req.params.name);
     res.json({ acknowledged: true });
   });
 
   router.get('/_data_stream/:name?', (req, res) => {
-    const name = req.params.name || 'logs-test';
-    const mappings = dataStreamMappingsStore.get(name) || {};
-    res.json({
-      data_streams: [
-        {
-          name: name,
-          timestamp_field: { name: '@timestamp' },
-          indices: [
+    const name = req.params.name;
+    if (name) {
+      const ds = globalStore.getDataStream(name);
+      if (ds) {
+        const mappings = dataStreamMappingsStore.get(name) || ds.mappings || {};
+        return res.json({
+          data_streams: [
             {
-              index_name: `.ds-${name}-000001`,
-              index_uuid: 'mock-uuid',
+              name: ds.name,
+              timestamp_field: { name: '@timestamp' },
+              indices: ds.indices.map((idx: string) => ({
+                index_name: idx,
+                index_uuid: 'mock-uuid',
+              })),
+              generation: ds.generation,
+              status: 'GREEN',
+              template: 'template-name',
+              settings: ds.settings,
+              mappings: mappings,
             },
           ],
-          generation: 1,
-          status: 'GREEN',
-          template: 'template-name',
-          settings: {},
-          mappings: mappings,
-        },
-      ],
+        });
+      }
+    }
+
+    // Default or all
+    const allDS = globalStore.getAllDataStreams();
+    res.json({
+      data_streams: allDS.map((ds) => ({
+        name: ds.name,
+        timestamp_field: { name: '@timestamp' },
+        indices: ds.indices.map((idx: string) => ({
+          index_name: idx,
+          index_uuid: 'mock-uuid',
+        })),
+        generation: ds.generation,
+        status: 'GREEN',
+        template: 'template-name',
+        settings: ds.settings,
+        mappings: dataStreamMappingsStore.get(ds.name) || ds.mappings || {},
+      })),
     });
   });
 
   // Data stream mapping endpoint (singular - for get_data_stream_mappings API)
   router.get('/_data_stream/:name/_mapping', (req, res) => {
     const name = req.params.name;
-    const mappings = dataStreamMappingsStore.get(name) || {};
+    const ds = globalStore.getDataStream(name);
+    const mappings = dataStreamMappingsStore.get(name) || ds?.mappings || {};
     res.json({
       data_streams: [
         {

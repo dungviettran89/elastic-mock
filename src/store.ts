@@ -25,6 +25,58 @@ export class Store {
   private disabledUsers: Set<string> = new Set();
   private tasks: Map<string, any> = new Map();
   private users: Map<string, any> = new Map();
+  private dataStreams: Map<string, any> = new Map();
+
+  // Data Stream Management
+  createDataStream(name: string) {
+    if (this.dataStreams.has(name)) return;
+
+    // Find matching template
+    let template: any = null;
+    for (const tpl of this.indexTemplates.values()) {
+      if (
+        tpl.index_patterns &&
+        tpl.index_patterns.some((pattern: string) => {
+          const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+          return regex.test(name);
+        })
+      ) {
+        template = tpl;
+        break;
+      }
+    }
+
+    const backingIndexName = `.ds-${name}-000001`;
+    const mappings = template?.template?.mappings || { properties: {} };
+    const settings = template?.template?.settings || { number_of_shards: 1, number_of_replicas: 0 };
+
+    this.createIndex(backingIndexName, { mappings, settings });
+
+    this.dataStreams.set(name, {
+      name,
+      indices: [backingIndexName],
+      generation: 1,
+      mappings,
+      settings,
+    });
+  }
+
+  getDataStream(name: string) {
+    return this.dataStreams.get(name);
+  }
+
+  deleteDataStream(name: string) {
+    const ds = this.dataStreams.get(name);
+    if (ds) {
+      ds.indices.forEach((idx: string) => this.deleteIndex(idx));
+      return this.dataStreams.delete(name);
+    }
+    return false;
+  }
+
+  getAllDataStreams() {
+    return Array.from(this.dataStreams.values());
+  }
 
   // User Management
   putUser(username: string, body: any) {
@@ -230,16 +282,28 @@ export class Store {
   }
 
   getIndex(name: string): IndexState | undefined {
+    let searchName = name;
+    if (name.endsWith('::failures')) {
+      searchName = name.replace('::failures', '');
+    }
+
     // 1. Direct match
-    if (this.indices.has(name)) {
-      return this.indices.get(name);
+    if (this.indices.has(searchName)) {
+      return this.indices.get(searchName);
     }
 
     // 2. Alias match
     for (const index of this.indices.values()) {
-      if (index.aliases.has(name)) {
+      if (index.aliases.has(searchName)) {
         return index;
       }
+    }
+
+    // 3. Data stream match
+    if (this.dataStreams.has(searchName)) {
+      const ds = this.dataStreams.get(searchName);
+      const lastIndex = ds.indices[ds.indices.length - 1];
+      return this.indices.get(lastIndex);
     }
 
     return undefined;
@@ -1062,6 +1126,33 @@ export class Store {
   }
 
   rollover(alias: string, newIndexName?: string) {
+    let searchName = alias;
+    if (alias.endsWith('::failures')) {
+      searchName = alias.replace('::failures', '');
+    }
+
+    if (this.dataStreams.has(searchName)) {
+      const ds = this.dataStreams.get(searchName);
+      ds.generation++;
+      const nextIndexName = `.ds-${searchName}-${String(ds.generation).padStart(6, '0')}`;
+
+      this.createIndex(nextIndexName, {
+        mappings: ds.mappings,
+        settings: ds.settings,
+      });
+      ds.indices.push(nextIndexName);
+
+      return {
+        old_index: ds.indices[ds.indices.length - 2],
+        new_index: nextIndexName,
+        rolled_over: true,
+        dry_run: false,
+        acknowledged: true,
+        shards_acknowledged: true,
+        conditions: {},
+      };
+    }
+
     const sourceIndex = this.getIndex(alias);
     if (!sourceIndex) {
       throw new Error(`Alias [${alias}] not found`);
@@ -1093,6 +1184,10 @@ export class Store {
       old_index: sourceIndex.name,
       new_index: newName,
       rolled_over: true,
+      dry_run: false,
+      acknowledged: true,
+      shards_acknowledged: true,
+      conditions: {},
     };
   }
 
