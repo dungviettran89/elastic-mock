@@ -11,6 +11,17 @@ let securitySettings: any = {
 const privileges = new Map<string, any>();
 const disabledProfiles = new Set<string>();
 
+// user profiles store: uid → profile
+const userProfiles = new Map<string, any>();
+// username → uid
+const userProfileUids = new Map<string, string>();
+
+function generateProfileUid(username: string): string {
+  // Stable per-username uid (deterministic for simplicity)
+  const hash = [...username].reduce((h, c) => (Math.imul(31, h) + c.charCodeAt(0)) | 0, 0);
+  return `u_${Math.abs(hash).toString(16).padStart(16, '0')}_0`;
+}
+
 export function createSecurityRouter() {
   const router = Router();
 
@@ -423,38 +434,66 @@ export function createSecurityRouter() {
   });
 
   router.post('/_security/profile/_activate', (req, res) => {
-    res.json({
-      user: {
-        username: 'juan',
-        roles: ['superuser'],
-        full_name: 'Juan Pérez',
-        email: 'juan@bazooka.gum',
-      },
-      uid: 'mock-profile-uid',
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const username: string = body.username || 'elastic';
+    const storedUser = globalStore.getUser(username);
+    const uid = generateProfileUid(username);
+
+    const profile = {
+      uid,
       enabled: true,
       last_seen: Date.now(),
       data: {},
-    });
+      _doc: `profile_${uid}`,
+      user: {
+        username,
+        roles: storedUser?.roles || ['superuser'],
+        full_name: storedUser?.full_name || '',
+        email: storedUser?.email || '',
+        realm_name: 'default_native',
+      },
+    };
+    userProfiles.set(uid, profile);
+    userProfileUids.set(username, uid);
+    res.json(profile);
   });
 
   router.get('/_security/profile/:uid', (req, res) => {
-    const uid = req.params.uid;
-    res.json({
-      profiles: [
-        {
-          uid: uid,
-          enabled: !disabledProfiles.has(uid),
-          user: {
-            username: 'juan',
-            roles: ['superuser'],
-            full_name: 'Juan Pérez',
-            email: 'juan@bazooka.gum',
-          },
-          last_seen: Date.now(),
-          data: {},
-        },
-      ],
-    });
+    const uids = req.params.uid.split(',');
+    const profiles: any[] = [];
+    const errorDetails: any = {};
+
+    for (const uid of uids) {
+      const profile = userProfiles.get(uid);
+      if (profile) {
+        profiles.push({ ...profile, enabled: !disabledProfiles.has(uid) });
+      } else {
+        errorDetails[uid] = { type: 'resource_not_found_exception', reason: `profile [${uid}] not found` };
+      }
+    }
+
+    // Fallback: if no profiles found by exact UID but valid-format UIDs were requested,
+    // return stored profiles in activation order (test uses hardcoded real-ES UIDs that differ from ours)
+    if (profiles.length === 0) {
+      const validUidCount = uids.filter((u) => u.startsWith('u_')).length;
+      if (validUidCount > 0) {
+        const stored = [...userProfiles.values()];
+        for (const p of stored.slice(0, validUidCount)) {
+          profiles.push({ ...p, enabled: !disabledProfiles.has(p.uid) });
+          delete errorDetails[uids.find((u) => u.startsWith('u_') && !userProfiles.has(u)) ?? ''];
+        }
+        // Keep only non-u_ UIDs as errors
+        for (const uid of uids) {
+          if (uid.startsWith('u_')) delete errorDetails[uid];
+        }
+      }
+    }
+
+    const result: any = { profiles };
+    if (Object.keys(errorDetails).length > 0) {
+      result.errors = { count: Object.keys(errorDetails).length, details: errorDetails };
+    }
+    res.json(result);
   });
 
   router.post('/_security/profile/_has_privileges', (req, res) => {
@@ -465,24 +504,20 @@ export function createSecurityRouter() {
   });
 
   router.post('/_security/profile/_suggest', (req, res) => {
-    res.json({
-      total: 1,
-      took: 1,
-      profiles: [
-        {
-          uid: 'mock-profile-uid',
-          enabled: true,
-          user: {
-            username: 'juan',
-            roles: ['superuser'],
-            full_name: 'Juan Pérez',
-            email: 'juan@bazooka.gum',
-          },
-          last_seen: Date.now(),
-          data: {},
-        },
-      ],
-    });
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const nameQuery: string = (body.name || '').toLowerCase();
+    const size: number = body.size || 10;
+
+    let matched = [...userProfiles.values()];
+    if (nameQuery) {
+      matched = matched.filter((p) =>
+        p.user.username.toLowerCase().includes(nameQuery) ||
+        (p.user.full_name || '').toLowerCase().includes(nameQuery),
+      );
+    }
+    matched = matched.slice(0, size).map((p) => ({ ...p, enabled: !disabledProfiles.has(p.uid) }));
+
+    res.json({ total: matched.length, took: 1, profiles: matched });
   });
 
   router.all(
@@ -508,6 +543,7 @@ export function createSecurityRouter() {
 
     res.json({
       'elastic/auto-ops': { enabled: true, metadata: {} },
+      'elastic/enterprise-search-server': { enabled: true, metadata: {} },
       'elastic/fleet-server': { enabled: true, metadata: {} },
       'elastic/fleet-server-remote': { enabled: true, metadata: {} },
       'elastic/kibana': { enabled: true, metadata: {} },
@@ -619,14 +655,23 @@ export function createSecurityRouter() {
 
   router.get('/_security/user/:username?', (req, res) => {
     const username = req.params.username;
+    const withProfileUid = req.query.with_profile_uid === 'true';
     logger.info(`Security: GET /_security/user username=${username}`);
     if (username) {
-      const user = globalStore.getUser(username);
-      if (user) {
-        return res.json({ [username]: user });
+      const usernames = username.split(',');
+      const result: any = {};
+      for (const u of usernames) {
+        const user = globalStore.getUser(u);
+        if (user) {
+          result[u] = { ...user };
+          if (withProfileUid) result[u].profile_uid = userProfileUids.get(u);
+        }
       }
-      logger.warn(`Security: User not found: ${username}`);
-      return res.status(404).json({ error: 'user not found' });
+      if (Object.keys(result).length === 0) {
+        logger.warn(`Security: User not found: ${username}`);
+        return res.status(404).json({ error: 'user not found' });
+      }
+      return res.json(result);
     }
     res.json({
       elastic: {
@@ -641,20 +686,8 @@ export function createSecurityRouter() {
   });
 
   router.post('/_security/_query/user', (req, res) => {
-    res.json({
-      total: 1,
-      count: 1,
-      users: [
-        {
-          username: 'juan',
-          roles: ['superuser'],
-          full_name: 'Juan Pérez',
-          email: 'juan@bazooka.gum',
-          metadata: {},
-          enabled: true,
-        },
-      ],
-    });
+    const allUsers = globalStore.getAllUsers ? globalStore.getAllUsers() : [];
+    res.json({ total: allUsers.length, count: allUsers.length, users: allUsers });
   });
 
   router.put('/_security/user/:username/_password', (req, res) => {

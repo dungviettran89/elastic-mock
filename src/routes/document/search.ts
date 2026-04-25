@@ -192,6 +192,51 @@ searchRouter.post(['/_msearch/template', '/:index/_msearch/template'], (req, res
   });
 });
 
+// kNN Search
+searchRouter.post('/:index/_knn_search', (req, res) => {
+  const { index } = req.params;
+  const body = req.body || {};
+  const knn = body.knn || {};
+  const field = knn.field;
+  const queryVector: number[] = knn.query_vector || [];
+  const k: number = knn.k || 10;
+  const fields: string[] = body.fields || [];
+
+  const indexState = globalStore.getIndex(index);
+  if (!indexState) {
+    return res.status(404).json({ error: { type: 'index_not_found_exception', index } });
+  }
+
+  const l2 = (a: number[], b: number[]) =>
+    Math.sqrt(a.reduce((sum, v, i) => sum + (v - b[i]) ** 2, 0));
+
+  const scored: { id: string; doc: any; score: number }[] = [];
+  for (const [id, doc] of indexState.documents.entries()) {
+    const vec: number[] | undefined = doc[field];
+    if (!Array.isArray(vec) || vec.length !== queryVector.length) continue;
+    const dist = l2(queryVector, vec);
+    scored.push({ id, doc, score: 1 / (1 + dist) });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const hits = scored.slice(0, k).map(({ id, doc, score }) => {
+    const hit: any = { _index: index, _id: id, _score: score, _source: doc };
+    if (fields.length > 0) {
+      hit.fields = {};
+      for (const f of fields) {
+        if (doc[f] !== undefined) hit.fields[f] = [doc[f]];
+      }
+    }
+    return hit;
+  });
+
+  res.json({
+    took: 1,
+    timed_out: false,
+    _shards: { total: 1, successful: 1, skipped: 0, failed: 0 },
+    hits: { total: { value: hits.length, relation: 'eq' }, max_score: hits[0]?.score ?? 0, hits },
+  });
+});
+
 // Rank Eval API
 searchRouter.post(['/_rank_eval', '/:index/_rank_eval'], (req, res) => {
   const index = req.params.index || 'my-index-000001';

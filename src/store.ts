@@ -109,6 +109,10 @@ export class Store {
     return this.users.delete(username);
   }
 
+  getAllUsers(): any[] {
+    return [...this.users.values()];
+  }
+
   // Task Management
   createTask(action: string, description: string) {
     const taskId = `mock-task-id:${Math.floor(Math.random() * 1000000)}`;

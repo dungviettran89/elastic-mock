@@ -235,6 +235,13 @@ async function runStep(step: any) {
       'security.delete_role': { method: 'DELETE', path: '/_security/role/{name}' },
       'security.delete_user': { method: 'DELETE', path: '/_security/user/{username}' },
       'security.change_password': { method: 'POST', path: '/_security/user/{username}/_password' },
+      'tasks.get': { method: 'GET', path: '/_tasks/{task_id}' },
+      'tasks.list': { method: 'GET', path: '/_tasks' },
+      'tasks.cancel': { method: 'POST', path: '/_tasks/_cancel' },
+      'connector.secret_post': { method: 'POST', path: '/_connector/_secret' },
+      'connector.secret_get': { method: 'GET', path: '/_connector/_secret/{id}' },
+      'connector.secret_put': { method: 'PUT', path: '/_connector/_secret/{id}' },
+      'indices.simulate_index_template': { method: 'POST', path: '/_index_template/_simulate_index/{name}' },
     };
 
     if (
