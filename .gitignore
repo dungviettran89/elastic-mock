@@ -153,4 +153,5 @@ QWEN.md
 
 # External Tests
 external-tests/
+test-report.json
 server.log
