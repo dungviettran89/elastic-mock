@@ -5,7 +5,7 @@ set -e
 # 1. Checkout tests
 if [ ! -d "./external-tests" ]; then
   echo "Cloning external tests..."
-  git clone --depth 1 https://github.com/elastic/elasticsearch-clients-tests.git ./external-tests
+  git clone --depth 1 --branch 8.19 https://github.com/elastic/elasticsearch-clients-tests.git ./external-tests
 else
   echo "External tests already exist, skipping clone."
 fi

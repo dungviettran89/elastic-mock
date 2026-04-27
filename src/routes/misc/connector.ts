@@ -2,9 +2,27 @@ import { Router } from 'express';
 
 // Simple in-memory store for connectors
 const connectorsStore = new Map<string, any>();
+const connectorSecretsStore = new Map<string, string>();
 
 export function createConnectorRouter() {
   const router = Router();
+
+  router.post('/_connector/_secret', (req, res) => {
+    const id = `secret-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    connectorSecretsStore.set(id, req.body?.value ?? '');
+    res.json({ id });
+  });
+
+  router.get('/_connector/_secret/:id', (req, res) => {
+    const value = connectorSecretsStore.get(req.params.id);
+    if (value === undefined) return res.status(404).json({ error: 'not found' });
+    res.json({ value });
+  });
+
+  router.put('/_connector/_secret/:id', (req, res) => {
+    connectorSecretsStore.set(req.params.id, req.body?.value ?? '');
+    res.json({ result: 'updated' });
+  });
 
   router.put('/_connector/:name', (req, res) => {
     const name = req.params.name;
@@ -255,6 +273,7 @@ export function createConnectorRouter() {
     const connector = connectorsStore.get(req.params.name);
     if (connector && req.body?.configuration) {
       connector.configuration = req.body.configuration;
+      connector.status = 'configured';
       connectorsStore.set(req.params.name, connector);
     }
     res.json({ acknowledged: true, result: 'updated' });
@@ -273,6 +292,7 @@ export function createConnectorRouter() {
     const connector = connectorsStore.get(req.params.name);
     if (connector && req.body?.is_native !== undefined) {
       connector.is_native = req.body.is_native;
+      connector.status = 'configured';
       connectorsStore.set(req.params.name, connector);
     }
     res.json({ acknowledged: true, result: 'updated' });

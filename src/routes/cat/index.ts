@@ -250,6 +250,12 @@ export function createCatRouter() {
         pattern: 'metrics-*',
         order: '0',
       },
+      {
+        name: 'elastic-agent-settings',
+        version: '1',
+        pattern: 'elastic-*',
+        order: '0',
+      },
     ];
     formatResults(res, req, data, ['name', 'version', 'pattern', 'order']);
   });

@@ -516,15 +516,32 @@ coreRouter.get(['/_simulate_template/:name', '/_simulate_index_template/:name'],
 });
 
 coreRouter.post('/_index_template/_simulate_index/:name', (req, res) => {
+  const body = req.body || {};
+  const indexPatterns = body.index_patterns
+    ? Array.isArray(body.index_patterns)
+      ? body.index_patterns
+      : [body.index_patterns]
+    : [];
+
+  // Return overlapping entry if there are existing index templates and patterns are given
+  const overlapping: any[] = [];
+  const existingTemplates = globalStore.getAllIndexTemplates();
+  if (indexPatterns.length > 0 && existingTemplates.size > 0) {
+    overlapping.push({
+      name: `simulate_index_template_${req.params.name}`,
+      index_patterns: indexPatterns,
+    });
+  }
+
   res.json({
     template: {
       mappings: { properties: {} },
       settings: {
-        index: { number_of_shards: '1', number_of_replicas: '0', blocks: { write: 'true' } },
+        index: { number_of_shards: '1', number_of_replicas: '0' },
       },
-      aliases: {},
+      aliases: body.template?.aliases || {},
     },
-    overlapping: [],
+    overlapping,
   });
 });
 

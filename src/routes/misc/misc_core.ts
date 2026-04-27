@@ -149,5 +149,9 @@ export function createMiscCoreRouter() {
     res.json({ took: 1, timed_out: false, failures: [], vertices: [], connections: [] });
   });
 
+  router.post('/_monitoring/bulk', (req, res) => {
+    res.json({ errors: false, ignored: false });
+  });
+
   return router;
 }
